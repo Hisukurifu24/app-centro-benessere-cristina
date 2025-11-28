@@ -1,20 +1,42 @@
+import React, { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
+import { NavigationContainer } from '@react-navigation/native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { AppProvider, useApp } from './src/context/AppContext';
+import Navigation from './src/navigation';
+import { requestNotificationPermissions, scheduleCompleannniNotifications } from './src/utils/notifications';
 
-export default function App() {
+function AppContent() {
+  const { clienti, impostazioni } = useApp();
+
+  useEffect(() => {
+    // Richiedi permessi notifiche e schedula notifiche compleanni
+    const setupNotifications = async () => {
+      const granted = await requestNotificationPermissions();
+      if (granted && clienti.length > 0) {
+        await scheduleCompleannniNotifications(clienti);
+      }
+    };
+
+    setupNotifications();
+  }, [clienti]);
+
   return (
-    <View style={styles.container}>
-      <Text>Open up App.tsx to start working on your app!</Text>
-      <StatusBar style="auto" />
-    </View>
+    <>
+      <StatusBar style={impostazioni.temaSuro ? 'light' : 'dark'} />
+      <Navigation />
+    </>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
+export default function App() {
+  return (
+    <SafeAreaProvider>
+      <AppProvider>
+        <NavigationContainer>
+          <AppContent />
+        </NavigationContainer>
+      </AppProvider>
+    </SafeAreaProvider>
+  );
+}
