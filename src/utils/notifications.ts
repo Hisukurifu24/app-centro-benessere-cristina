@@ -21,47 +21,69 @@ export const requestNotificationPermissions = async () => {
 	return true;
 };
 
-export const scheduleCompleannniNotifications = async (clienti: Cliente[]) => {
-	// Cancella tutte le notifiche precedenti
-	await Notifications.cancelAllScheduledNotificationsAsync();
+export const scheduleCompleanniNotifications = async (clienti: Cliente[]) => {
+	try {
+		// Cancella tutte le notifiche precedenti
+		await Notifications.cancelAllScheduledNotificationsAsync();
 
-	const today = new Date();
+		const today = new Date();
+		const maxNotifications = 64; // iOS ha un limite di 64 notifiche locali
+		let scheduledCount = 0;
 
-	for (const cliente of clienti) {
-		const birthDate = new Date(cliente.dataNascita);
+		// Ordina i clienti per data di compleanno più vicina
+		const clientiConData = clienti
+			.filter(cliente => cliente.dataNascita)
+			.map(cliente => {
+				const birthDate = new Date(cliente.dataNascita);
+				const thisYearBirthday = new Date(
+					today.getFullYear(),
+					birthDate.getMonth(),
+					birthDate.getDate(),
+					9, 0, 0
+				);
 
-		// Crea data del compleanno per quest'anno
-		const thisYearBirthday = new Date(
-			today.getFullYear(),
-			birthDate.getMonth(),
-			birthDate.getDate(),
-			9, // ore 9:00
-			0,
-			0
-		);
+				if (thisYearBirthday < today) {
+					thisYearBirthday.setFullYear(today.getFullYear() + 1);
+				}
 
-		// Se il compleanno è già passato quest'anno, schedula per l'anno prossimo
-		if (thisYearBirthday < today) {
-			thisYearBirthday.setFullYear(today.getFullYear() + 1);
+				return { cliente, nextBirthday: thisYearBirthday };
+			})
+			.sort((a, b) => a.nextBirthday.getTime() - b.nextBirthday.getTime());
+
+		// Schedula solo i primi 64 compleanni più vicini
+		for (const { cliente, nextBirthday } of clientiConData) {
+			if (scheduledCount >= maxNotifications) {
+				console.log(`Limite di ${maxNotifications} notifiche raggiunto`);
+				break;
+			}
+
+			try {
+				const birthDate = new Date(cliente.dataNascita);
+				await Notifications.scheduleNotificationAsync({
+					content: {
+						title: '🎉 Compleanno!',
+						body: `Oggi è il compleanno di ${cliente.nome}!`,
+						data: { clienteId: cliente.id, clienteNome: cliente.nome },
+						sound: true,
+					},
+					trigger: {
+						hour: 9,
+						minute: 0,
+						day: birthDate.getDate(),
+						month: birthDate.getMonth() + 1, // I mesi in trigger Calendar vanno da 1 a 12
+						repeats: true,
+						type: Notifications.SchedulableTriggerInputTypes.CALENDAR,
+					},
+				});
+				scheduledCount++;
+			} catch (error) {
+				console.error(`Errore schedulazione notifica per ${cliente.nome}:`, error);
+			}
 		}
 
-		try {
-			await Notifications.scheduleNotificationAsync({
-				content: {
-					title: '🎉 Compleanno!',
-					body: `Oggi è il compleanno di ${cliente.nome}!`,
-					data: { clienteId: cliente.id, clienteNome: cliente.nome },
-					sound: true,
-				},
-				trigger: {
-					date: thisYearBirthday,
-					repeats: true,
-					type: Notifications.SchedulableTriggerInputTypes.DATE,
-				},
-			});
-		} catch (error) {
-			console.error(`Errore schedulazione notifica per ${cliente.nome}:`, error);
-		}
+		console.log(`Schedulati ${scheduledCount} compleanni su ${clienti.length} clienti`);
+	} catch (error) {
+		console.error('Errore schedulazione notifiche compleanni:', error);
 	}
 };
 
@@ -71,7 +93,9 @@ export const checkCompleanni = (clienti: Cliente[]): Cliente[] => {
 	const todayDay = today.getDate();
 
 	return clienti.filter(cliente => {
+		if (!cliente.dataNascita) return false;
 		const birthDate = new Date(cliente.dataNascita);
+		if (isNaN(birthDate.getTime())) return false;
 		return birthDate.getMonth() === todayMonth && birthDate.getDate() === todayDay;
 	});
 };

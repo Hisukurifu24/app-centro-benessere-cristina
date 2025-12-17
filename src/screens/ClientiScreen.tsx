@@ -18,20 +18,78 @@ import { formatDate } from '../utils/helpers';
 
 export default function ClientiScreen() {
 	const navigation = useNavigation();
-	const { clienti, impostazioni } = useApp();
+	const { clienti, trattamenti, impostazioni } = useApp();
 	const [searchQuery, setSearchQuery] = useState('');
+	const [sortBy, setSortBy] = useState<'nome' | 'cognome' | 'ultimoTrattamento'>('nome');
+	const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 	const theme = impostazioni.temaSuro ? darkTheme : lightTheme;
 
-	const filteredClienti = useMemo(() => {
-		if (!searchQuery.trim()) return clienti;
+	const filteredAndSortedClienti = useMemo(() => {
+		let result = clienti;
 
-		const query = searchQuery.toLowerCase();
-		return clienti.filter(cliente =>
-			cliente.nome.toLowerCase().includes(query) ||
-			cliente.telefono.includes(query) ||
-			cliente.email.toLowerCase().includes(query)
-		);
-	}, [clienti, searchQuery]);
+		// Applica filtro
+		if (searchQuery.trim()) {
+			const query = searchQuery.toLowerCase();
+			result = result.filter(cliente =>
+				cliente.nome.toLowerCase().includes(query) ||
+				cliente.telefono.includes(query) ||
+				cliente.email.toLowerCase().includes(query)
+			);
+		}
+
+		// Applica ordinamento
+		result = [...result].sort((a, b) => {
+			let comparison = 0;
+
+			switch (sortBy) {
+				case 'nome':
+					// Ordina per nome completo
+					comparison = a.nome.localeCompare(b.nome, 'it');
+					break;
+				case 'cognome':
+					// Estrae il cognome (ultima parola del nome)
+					const getCognome = (nomeCompleto: string) => {
+						const parti = nomeCompleto.trim().split(' ');
+						return parti[parti.length - 1];
+					};
+					const cognomeA = getCognome(a.nome);
+					const cognomeB = getCognome(b.nome);
+					comparison = cognomeA.localeCompare(cognomeB, 'it');
+					break;
+				case 'ultimoTrattamento':
+					// Trova l'ultimo trattamento per ogni cliente
+					const trattamentiA = trattamenti.filter(t => t.clienteId === a.id);
+					const trattamentiB = trattamenti.filter(t => t.clienteId === b.id);
+
+					const ultimoA = trattamentiA.length > 0
+						? Math.max(...trattamentiA.map(t => new Date(t.data).getTime()))
+						: 0;
+					const ultimoB = trattamentiB.length > 0
+						? Math.max(...trattamentiB.map(t => new Date(t.data).getTime()))
+						: 0;
+
+					comparison = ultimoB - ultimoA; // Più recenti prima di default
+					break;
+			}
+
+			return sortOrder === 'asc' ? comparison : -comparison;
+		});
+
+		return result;
+	}, [clienti, trattamenti, searchQuery, sortBy, sortOrder]);
+
+	const toggleSortOrder = () => {
+		setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+	};
+
+	const handleSortChange = (newSortBy: 'nome' | 'cognome' | 'ultimoTrattamento') => {
+		if (sortBy === newSortBy) {
+			toggleSortOrder();
+		} else {
+			setSortBy(newSortBy);
+			setSortOrder('asc');
+		}
+	};
 
 	const renderCliente = ({ item }) => (
 		<TouchableOpacity
@@ -96,8 +154,90 @@ export default function ClientiScreen() {
 				)}
 			</View>
 
+			<View style={[styles.sortContainer, { backgroundColor: theme.card }]}>
+				<Text style={[styles.sortLabel, { color: theme.textSecondary }]}>Ordina per:</Text>
+				<TouchableOpacity
+					style={[
+						styles.sortButton,
+						sortBy === 'nome' && { backgroundColor: theme.primary }
+					]}
+					onPress={() => handleSortChange('nome')}
+				>
+					<Ionicons
+						name="text"
+						size={16}
+						color={sortBy === 'nome' ? '#FFF' : theme.textSecondary}
+					/>
+					<Text style={[
+						styles.sortButtonText,
+						{ color: sortBy === 'nome' ? '#FFF' : theme.textSecondary }
+					]}>
+						Nome
+					</Text>
+					{sortBy === 'nome' && (
+						<Ionicons
+							name={sortOrder === 'asc' ? 'arrow-up' : 'arrow-down'}
+							size={14}
+							color="#FFF"
+						/>
+					)}
+				</TouchableOpacity>
+				<TouchableOpacity
+					style={[
+						styles.sortButton,
+						sortBy === 'cognome' && { backgroundColor: theme.primary }
+					]}
+					onPress={() => handleSortChange('cognome')}
+				>
+					<Ionicons
+						name="person"
+						size={16}
+						color={sortBy === 'cognome' ? '#FFF' : theme.textSecondary}
+					/>
+					<Text style={[
+						styles.sortButtonText,
+						{ color: sortBy === 'cognome' ? '#FFF' : theme.textSecondary }
+					]}>
+						Cognome
+					</Text>
+					{sortBy === 'cognome' && (
+						<Ionicons
+							name={sortOrder === 'asc' ? 'arrow-up' : 'arrow-down'}
+							size={14}
+							color="#FFF"
+						/>
+					)}
+				</TouchableOpacity>
+				<TouchableOpacity
+					style={[
+						styles.sortButton,
+						sortBy === 'ultimoTrattamento' && { backgroundColor: theme.primary }
+					]}
+					onPress={() => handleSortChange('ultimoTrattamento')}
+				>
+					<Ionicons
+						name="medical"
+						size={16}
+						color={sortBy === 'ultimoTrattamento' ? '#FFF' : theme.textSecondary}
+					/>
+					<Text style={[
+						styles.sortButtonText,
+						{ color: sortBy === 'ultimoTrattamento' ? '#FFF' : theme.textSecondary }
+					]}>
+						Ultimo Tratt.
+					</Text>
+					{sortBy === 'ultimoTrattamento' && (
+						<Ionicons
+							name={sortOrder === 'asc' ? 'arrow-up' : 'arrow-down'}
+							size={14}
+							color="#FFF"
+						/>
+					)}
+				</TouchableOpacity>
+			</View>
+
 			<FlatList
-				data={filteredClienti}
+				data={filteredAndSortedClienti}
 				renderItem={renderCliente}
 				keyExtractor={item => item.id}
 				contentContainerStyle={styles.listContent}
@@ -158,6 +298,33 @@ export default function ClientiScreen() {
 	searchInput: {
 		flex: 1,
 		fontSize: 16,
+	},
+	sortContainer: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		marginHorizontal: 16,
+		marginBottom: 12,
+		paddingHorizontal: 16,
+		paddingVertical: 12,
+		borderRadius: 12,
+		gap: 8,
+	},
+	sortLabel: {
+		fontSize: 14,
+		fontWeight: '600',
+		marginRight: 4,
+	},
+	sortButton: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		paddingHorizontal: 12,
+		paddingVertical: 8,
+		borderRadius: 20,
+		gap: 4,
+	},
+	sortButtonText: {
+		fontSize: 13,
+		fontWeight: '600',
 	},
 	listContent: {
 		padding: 16,

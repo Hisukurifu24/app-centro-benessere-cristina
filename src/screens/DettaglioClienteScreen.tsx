@@ -17,6 +17,7 @@ import { useApp } from '../context/AppContext';
 import { lightTheme, darkTheme } from '../theme/colors';
 import { formatDate, calculateAge } from '../utils/helpers';
 import { showImagePickerOptions } from '../utils/imagePicker';
+import DatePicker from '../components/DatePicker';
 
 export default function DettaglioClienteScreen() {
 	const navigation = useNavigation();
@@ -176,9 +177,23 @@ export default function DettaglioClienteScreen() {
 
 					<View style={styles.infoRow}>
 						<Ionicons name="calendar" size={20} color={theme.primary} />
-						<Text style={[styles.infoText, { color: theme.text }]}>
-							{formatDate(cliente.dataNascita)} ({calculateAge(cliente.dataNascita)} anni)
-						</Text>
+						{isEditing ? (
+							<View style={{ flex: 1, marginLeft: 12 }}>
+								<DatePicker
+									label=""
+									value={editedCliente?.dataNascita ? new Date(editedCliente.dataNascita) : new Date()}
+									onChange={(date) =>
+										setEditedCliente(prev => prev ? { ...prev, dataNascita: date.toISOString() } : prev)
+									}
+									theme={theme}
+									maximumDate={new Date()}
+								/>
+							</View>
+						) : (
+							<Text style={[styles.infoText, { color: theme.text }]}>
+								{formatDate(cliente.dataNascita)} ({calculateAge(cliente.dataNascita)} anni)
+							</Text>
+						)}
 					</View>
 
 					<View style={styles.infoRow}>

@@ -82,9 +82,7 @@ export default function AggiungiTrattamentoScreen() {
 		} catch (error) {
 			Alert.alert('Errore', 'Impossibile aggiungere il tipo di trattamento');
 		}
-	};
-
-	const selectTipoTrattamento = (tipo: any) => {
+	}; const selectTipoTrattamento = (tipo: any) => {
 		setNome(tipo.nome);
 		setDescrizione(tipo.descrizioneDefault);
 		setShowTipiModal(false);

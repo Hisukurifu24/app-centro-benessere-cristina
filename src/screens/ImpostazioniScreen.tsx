@@ -13,16 +13,18 @@ import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { useApp } from '../context/AppContext';
 import { lightTheme, darkTheme } from '../theme/colors';
-import { exportData } from '../utils/helpers';
+import { exportData, importData } from '../utils/helpers';
+import Constants from 'expo-constants';
 
 export default function ImpostazioniScreen() {
-	const { clienti, trattamenti, promozioni, tipiTrattamento, impostazioni, updateImpostazioni } = useApp();
+	const { clienti, trattamenti, promozioni, tipiTrattamento, impostazioni, updateImpostazioni, importAllData } = useApp();
 	const theme = impostazioni.temaSuro ? darkTheme : lightTheme;
 
 	const handleToggle = async (setting: string, value: boolean) => {
 		if (impostazioni.vibrazione) {
 			await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 		}
+
 		await updateImpostazioni({ [setting]: value });
 	};
 
@@ -45,6 +47,34 @@ export default function ImpostazioniScreen() {
 		);
 	};
 
+	const handleImport = async () => {
+		Alert.alert(
+			'Importa Dati',
+			'ATTENZIONE: Questa operazione sostituirà tutti i dati attuali con quelli del file di backup. Sei sicuro?',
+			[
+				{ text: 'Annulla', style: 'cancel' },
+				{
+					text: 'Importa',
+					style: 'destructive',
+					onPress: async () => {
+						const data = await importData();
+						if (data) {
+							try {
+								await importAllData(data);
+								if (impostazioni.vibrazione) {
+									await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+								}
+								Alert.alert('Successo', 'Dati importati correttamente');
+							} catch (error) {
+								Alert.alert('Errore', 'Impossibile importare i dati');
+							}
+						}
+					},
+				},
+			]
+		);
+	};
+
 	return (
 		<SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'left', 'right']}>
 			<View style={[styles.header, { backgroundColor: theme.card, borderBottomColor: theme.border }]}>
@@ -54,24 +84,6 @@ export default function ImpostazioniScreen() {
 			<ScrollView contentContainerStyle={styles.content}>
 				<View style={[styles.section, { backgroundColor: theme.card }]}>
 					<Text style={[styles.sectionTitle, { color: theme.text }]}>Preferenze</Text>
-
-					<View style={[styles.settingRow, { borderBottomColor: theme.border }]}>
-						<View style={styles.settingInfo}>
-							<Ionicons name="volume-high" size={24} color={theme.primary} />
-							<View style={styles.settingText}>
-								<Text style={[styles.settingLabel, { color: theme.text }]}>Suoni</Text>
-								<Text style={[styles.settingDescription, { color: theme.textSecondary }]}>
-									Abilita suoni di notifica
-								</Text>
-							</View>
-						</View>
-						<Switch
-							value={impostazioni.suoni}
-							onValueChange={(value) => handleToggle('suoni', value)}
-							trackColor={{ false: theme.border, true: theme.primary }}
-							thumbColor="#FFFFFF"
-						/>
-					</View>
 
 					<View style={[styles.settingRow, { borderBottomColor: theme.border }]}>
 						<View style={styles.settingInfo}>
@@ -118,7 +130,7 @@ export default function ImpostazioniScreen() {
 					<Text style={[styles.sectionTitle, { color: theme.text }]}>Dati</Text>
 
 					<TouchableOpacity
-						style={[styles.actionRow, { borderBottomWidth: 0 }]}
+						style={[styles.actionRow, { borderBottomColor: theme.border }]}
 						onPress={handleExport}
 					>
 						<View style={styles.settingInfo}>
@@ -132,11 +144,28 @@ export default function ImpostazioniScreen() {
 						</View>
 						<Ionicons name="chevron-forward" size={24} color={theme.textSecondary} />
 					</TouchableOpacity>
-				</View>
 
+					<TouchableOpacity
+						style={[styles.actionRow, { borderBottomWidth: 0 }]}
+						onPress={handleImport}
+					>
+						<View style={styles.settingInfo}>
+							<Ionicons name="cloud-upload" size={24} color={theme.primary} />
+							<View style={styles.settingText}>
+								<Text style={[styles.settingLabel, { color: theme.text }]}>Importa Backup</Text>
+								<Text style={[styles.settingDescription, { color: theme.textSecondary }]}>
+									Ripristina i dati da un file di backup
+								</Text>
+							</View>
+						</View>
+						<Ionicons name="chevron-forward" size={24} color={theme.textSecondary} />
+					</TouchableOpacity>
+				</View>
 				<View style={[styles.infoCard, { backgroundColor: theme.card }]}>
 					<Text style={[styles.infoTitle, { color: theme.text }]}>Centro Estetico Cristina</Text>
-					<Text style={[styles.infoVersion, { color: theme.textSecondary }]}>Versione 1.0.0</Text>
+					<Text style={[styles.infoVersion, { color: theme.textSecondary }]}>
+						Versione {Constants.expoConfig?.version || '1.0.0'}
+					</Text>
 					<Text style={[styles.infoText, { color: theme.textSecondary }]}>
 						App gestionale per iPad
 					</Text>

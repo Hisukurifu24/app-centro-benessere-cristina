@@ -34,6 +34,12 @@ interface AppContextType {
 
 	// Utility
 	refreshData: () => Promise<void>;
+	importAllData: (data: {
+		clienti: Cliente[];
+		trattamenti: Trattamento[];
+		promozioni: Promozione[];
+		tipiTrattamento: TipoTrattamento[];
+	}) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -52,7 +58,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 	const [promozioni, setPromozioni] = useState<Promozione[]>([]);
 	const [tipiTrattamento, setTipiTrattamento] = useState<TipoTrattamento[]>([]);
 	const [impostazioni, setImpostazioni] = useState<Impostazioni>({
-		suoni: true,
 		vibrazione: true,
 		temaSuro: false,
 	});
@@ -61,6 +66,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 	useEffect(() => {
 		loadAllData();
 	}, []);
+
+
 
 	const loadAllData = async () => {
 		try {
@@ -194,6 +201,31 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 		await AsyncStorage.setItem(STORAGE_KEYS.IMPOSTAZIONI, JSON.stringify(nuoveImpostazioni));
 	};
 
+	// IMPORT ALL DATA
+	const importAllData = async (data: {
+		clienti: Cliente[];
+		trattamenti: Trattamento[];
+		promozioni: Promozione[];
+		tipiTrattamento: TipoTrattamento[];
+	}) => {
+		try {
+			setClienti(data.clienti);
+			setTrattamenti(data.trattamenti);
+			setPromozioni(data.promozioni);
+			setTipiTrattamento(data.tipiTrattamento);
+
+			await Promise.all([
+				AsyncStorage.setItem(STORAGE_KEYS.CLIENTI, JSON.stringify(data.clienti)),
+				AsyncStorage.setItem(STORAGE_KEYS.TRATTAMENTI, JSON.stringify(data.trattamenti)),
+				AsyncStorage.setItem(STORAGE_KEYS.PROMOZIONI, JSON.stringify(data.promozioni)),
+				AsyncStorage.setItem(STORAGE_KEYS.TIPI_TRATTAMENTO, JSON.stringify(data.tipiTrattamento)),
+			]);
+		} catch (error) {
+			console.error('Errore importazione dati:', error);
+			throw error;
+		}
+	};
+
 	const value: AppContextType = {
 		clienti,
 		trattamenti,
@@ -214,6 +246,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 		deletePromozione,
 		updateImpostazioni,
 		refreshData,
+		importAllData,
 	};
 
 	return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

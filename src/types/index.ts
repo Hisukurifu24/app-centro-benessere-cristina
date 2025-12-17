@@ -42,7 +42,6 @@ export interface Promozione {
 }
 
 export interface Impostazioni {
-	suoni: boolean;
 	vibrazione: boolean;
 	temaSuro: boolean; // true = scuro, false = chiaro
 }

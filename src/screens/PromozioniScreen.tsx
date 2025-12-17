@@ -10,8 +10,7 @@ import {
 	Modal,
 	TextInput,
 	ScrollView,
-	KeyboardAvoidingView,
-	Platform,
+	Share,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Sharing from 'expo-sharing';
@@ -35,14 +34,28 @@ export default function PromozioniScreen() {
 
 	const handleShare = async (promozione: any) => {
 		try {
-			const canShare = await Sharing.isAvailableAsync();
-			if (canShare && promozione.foto) {
-				await Sharing.shareAsync(promozione.foto, {
-					dialogTitle: `Condividi: ${promozione.nome}`,
-				});
-			} else {
-				Alert.alert('Info', 'Condivisione non disponibile');
+			// Crea il messaggio di testo della promozione
+			const message = `${promozione.nome}
+
+${promozione.descrizione ? `${promozione.descrizione}\n\n` : ''}📅 Valida dal ${formatDate(promozione.dataInizio)} al ${formatDate(promozione.dataFine)}`;
+
+			// Se c'è una foto, prova a condividerla con il testo
+			if (promozione.foto) {
+				const canShare = await Sharing.isAvailableAsync();
+				if (canShare) {
+					await Sharing.shareAsync(promozione.foto, {
+						dialogTitle: `Condividi: ${promozione.nome}`,
+						mimeType: 'image/*',
+						UTI: 'public.image',
+					});
+				}
 			}
+
+			// Condividi sempre anche il testo
+			await Share.share({
+				message: message,
+				title: promozione.nome,
+			});
 		} catch (error) {
 			console.error('Errore condivisione:', error);
 			Alert.alert('Errore', 'Impossibile condividere la promozione');
@@ -64,14 +77,22 @@ export default function PromozioniScreen() {
 				dataFine: dataFine.toISOString(),
 			});
 
+			// Reset dei campi dopo il successo del salvataggio
 			setNome('');
 			setDescrizione('');
 			setDataInizio(new Date());
 			setDataFine(new Date());
 			setFoto(undefined);
+
+			// Chiudi il modal prima di mostrare l'alert
 			setShowModal(false);
-			Alert.alert('Successo', 'Promozione aggiunta');
+
+			// Mostra l'alert dopo aver chiuso il modal
+			setTimeout(() => {
+				Alert.alert('Successo', 'Promozione aggiunta');
+			}, 300);
 		} catch (error) {
+			console.error('Errore durante l\'aggiunta della promozione:', error);
 			Alert.alert('Errore', 'Impossibile aggiungere la promozione');
 		}
 	};
@@ -87,7 +108,7 @@ export default function PromozioniScreen() {
 		);
 	};
 
-	const renderPromozione = ({ item }) => {
+	const renderPromozione = ({ item }: { item: any }) => {
 		const now = new Date();
 		const endDate = new Date(item.dataFine);
 		const isExpired = endDate < now;
@@ -172,90 +193,86 @@ export default function PromozioniScreen() {
 				visible={showModal}
 				animationType="slide"
 				onRequestClose={() => setShowModal(false)}
+				presentationStyle="pageSheet"
 			>
-				<SafeAreaView style={{ flex: 1, backgroundColor: theme.background }} edges={['top']}>
-					<KeyboardAvoidingView
-						style={{ flex: 1 }}
-						behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-					>
-						<View style={[styles.modalContainer, { backgroundColor: theme.background }]}>
-							<View style={[styles.modalHeader, { backgroundColor: theme.card, borderBottomColor: theme.border }]}>
-								<TouchableOpacity onPress={() => setShowModal(false)}>
-									<Ionicons name="close" size={28} color={theme.text} />
-								</TouchableOpacity>
-								<Text style={[styles.modalTitle, { color: theme.text }]}>Nuova Promozione</Text>
-								<TouchableOpacity onPress={handleSave}>
-									<Text style={[styles.saveButton, { color: theme.primary }]}>Salva</Text>
-								</TouchableOpacity>
+				<SafeAreaView style={{ flex: 1, backgroundColor: theme.background }} edges={['top', 'bottom']}>
+					<View style={[styles.modalContainer, { backgroundColor: theme.background }]}>
+						<View style={[styles.modalHeader, { backgroundColor: theme.card, borderBottomColor: theme.border }]}>
+							<TouchableOpacity onPress={() => setShowModal(false)}>
+								<Ionicons name="close" size={28} color={theme.text} />
+							</TouchableOpacity>
+							<Text style={[styles.modalTitle, { color: theme.text }]}>Nuova Promozione</Text>
+							<TouchableOpacity onPress={handleSave}>
+								<Text style={[styles.saveButton, { color: theme.primary }]}>Salva</Text>
+							</TouchableOpacity>
+						</View>
+
+						<ScrollView style={styles.modalContent} contentContainerStyle={styles.modalContentContainer}>
+							<TouchableOpacity
+								style={[styles.fotoButton, { borderColor: theme.border }]}
+								onPress={() => showImagePickerOptions(setFoto)}
+							>
+								{foto ? (
+									<Image source={{ uri: foto }} style={styles.fotoPreview} />
+								) : (
+									<>
+										<Ionicons name="image" size={40} color={theme.textSecondary} />
+										<Text style={[styles.fotoButtonText, { color: theme.textSecondary }]}>
+											Aggiungi foto
+										</Text>
+									</>
+								)}
+							</TouchableOpacity>
+
+							<View style={[styles.inputContainer, { backgroundColor: theme.card }]}>
+								<Text style={[styles.label, { color: theme.textSecondary }]}>Nome *</Text>
+								<TextInput
+									style={[styles.input, { color: theme.text }]}
+									placeholder="Nome promozione"
+									placeholderTextColor={theme.textSecondary}
+									value={nome}
+									onChangeText={setNome}
+								/>
 							</View>
 
-							<ScrollView style={styles.modalContent} contentContainerStyle={styles.modalContentContainer}>
-								<TouchableOpacity
-									style={[styles.fotoButton, { borderColor: theme.border }]}
-									onPress={() => showImagePickerOptions(setFoto)}
-								>
-									{foto ? (
-										<Image source={{ uri: foto }} style={styles.fotoPreview} />
-									) : (
-										<>
-											<Ionicons name="image" size={40} color={theme.textSecondary} />
-											<Text style={[styles.fotoButtonText, { color: theme.textSecondary }]}>
-												Aggiungi foto
-											</Text>
-										</>
-									)}
-								</TouchableOpacity>
-
-								<View style={[styles.inputContainer, { backgroundColor: theme.card }]}>
-									<Text style={[styles.label, { color: theme.textSecondary }]}>Nome *</Text>
-									<TextInput
-										style={[styles.input, { color: theme.text }]}
-										placeholder="Nome promozione"
-										placeholderTextColor={theme.textSecondary}
-										value={nome}
-										onChangeText={setNome}
-									/>
-								</View>
-
-								<View style={[styles.inputContainer, { backgroundColor: theme.card }]}>
-									<Text style={[styles.label, { color: theme.textSecondary }]}>Descrizione</Text>
-									<TextInput
-										style={[styles.textArea, { color: theme.text }]}
-										placeholder="Descrizione promozione..."
-										placeholderTextColor={theme.textSecondary}
-										value={descrizione}
-										onChangeText={setDescrizione}
-										multiline
-										numberOfLines={4}
-										textAlignVertical="top"
-									/>
-								</View>
-
-								<DatePicker
-									label="Data Inizio"
-									value={dataInizio}
-									onChange={(date) => {
-										setDataInizio(date);
-										// Se la data fine è precedente alla nuova data inizio, aggiornala
-										if (dataFine < date) {
-											setDataFine(date);
-										}
-									}}
-									theme={theme}
-									required
+							<View style={[styles.inputContainer, { backgroundColor: theme.card }]}>
+								<Text style={[styles.label, { color: theme.textSecondary }]}>Descrizione</Text>
+								<TextInput
+									style={[styles.textArea, { color: theme.text }]}
+									placeholder="Descrizione promozione..."
+									placeholderTextColor={theme.textSecondary}
+									value={descrizione}
+									onChangeText={setDescrizione}
+									multiline
+									numberOfLines={4}
+									textAlignVertical="top"
 								/>
+							</View>
 
-								<DatePicker
-									label="Data Fine"
-									value={dataFine}
-									onChange={setDataFine}
-									theme={theme}
-									minimumDate={dataInizio}
-									required
-								/>
-							</ScrollView>
-						</View>
-					</KeyboardAvoidingView>
+							<DatePicker
+								label="Data Inizio"
+								value={dataInizio}
+								onChange={(date) => {
+									setDataInizio(date);
+									// Se la data fine è precedente alla nuova data inizio, aggiornala
+									if (dataFine < date) {
+										setDataFine(date);
+									}
+								}}
+								theme={theme}
+								required
+							/>
+
+							<DatePicker
+								label="Data Fine"
+								value={dataFine}
+								onChange={setDataFine}
+								theme={theme}
+								minimumDate={dataInizio}
+								required
+							/>
+						</ScrollView>
+					</View>
 				</SafeAreaView>
 			</Modal>
 		</SafeAreaView>

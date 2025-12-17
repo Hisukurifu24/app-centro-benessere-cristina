@@ -1,7 +1,47 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
+import * as DocumentPicker from 'expo-document-picker';
 import { Alert, Platform } from 'react-native';
 import { Cliente, Trattamento, Promozione, TipoTrattamento } from '../types';
+
+export const importData = async (): Promise<{
+	clienti: Cliente[];
+	trattamenti: Trattamento[];
+	promozioni: Promozione[];
+	tipiTrattamento: TipoTrattamento[];
+} | null> => {
+	try {
+		const result = await DocumentPicker.getDocumentAsync({
+			type: 'application/json',
+			copyToCacheDirectory: true,
+		});
+
+		if (result.canceled) {
+			return null;
+		}
+
+		const fileUri = result.assets[0].uri;
+		const fileContent = await FileSystem.readAsStringAsync(fileUri);
+		const data = JSON.parse(fileContent);
+
+		// Validazione base dei dati
+		if (!data.clienti || !data.trattamenti || !data.promozioni || !data.tipiTrattamento) {
+			Alert.alert('Errore', 'File di backup non valido');
+			return null;
+		}
+
+		return {
+			clienti: data.clienti,
+			trattamenti: data.trattamenti,
+			promozioni: data.promozioni,
+			tipiTrattamento: data.tipiTrattamento,
+		};
+	} catch (error) {
+		console.error('Errore import dati:', error);
+		Alert.alert('Errore', 'Impossibile importare i dati. Assicurati che il file sia valido.');
+		return null;
+	}
+};
 
 export const exportData = async (
 	clienti: Cliente[],
