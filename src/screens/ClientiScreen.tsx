@@ -8,6 +8,7 @@ import {
 	TextInput,
 	Image,
 	Alert,
+	ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -154,7 +155,12 @@ export default function ClientiScreen() {
 				)}
 			</View>
 
-			<View style={[styles.sortContainer, { backgroundColor: theme.card }]}>
+			<ScrollView
+				horizontal
+				showsHorizontalScrollIndicator={false}
+				style={[styles.sortContainer, { backgroundColor: theme.card }]}
+				contentContainerStyle={styles.sortContentContainer}
+			>
 				<Text style={[styles.sortLabel, { color: theme.textSecondary }]}>Ordina per:</Text>
 				<TouchableOpacity
 					style={[
@@ -234,7 +240,7 @@ export default function ClientiScreen() {
 						/>
 					)}
 				</TouchableOpacity>
-			</View>
+			</ScrollView>
 
 			<FlatList
 				data={filteredAndSortedClienti}
@@ -300,13 +306,16 @@ export default function ClientiScreen() {
 		fontSize: 16,
 	},
 	sortContainer: {
-		flexDirection: 'row',
-		alignItems: 'center',
 		marginHorizontal: 16,
 		marginBottom: 12,
+		borderRadius: 12,
+		flexGrow: 0,
+	},
+	sortContentContainer: {
+		flexDirection: 'row',
+		alignItems: 'center',
 		paddingHorizontal: 16,
 		paddingVertical: 12,
-		borderRadius: 12,
 		gap: 8,
 	},
 	sortLabel: {
