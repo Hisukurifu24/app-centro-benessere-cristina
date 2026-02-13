@@ -9,16 +9,20 @@ import {
 	Image,
 	Alert,
 	ScrollView,
+	ListRenderItem,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { useApp } from '../context/AppContext';
 import { lightTheme, darkTheme } from '../theme/colors';
 import { formatDate } from '../utils/helpers';
+import { RootStackParamList } from '../types/navigation';
+import { Cliente } from '../types';
 
 export default function ClientiScreen() {
-	const navigation = useNavigation();
+	const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList, 'ClientiList'>>();
 	const { clienti, trattamenti, impostazioni } = useApp();
 	const [searchQuery, setSearchQuery] = useState('');
 	const [sortBy, setSortBy] = useState<'nome' | 'cognome' | 'ultimoTrattamento'>('nome');
@@ -92,7 +96,7 @@ export default function ClientiScreen() {
 		}
 	};
 
-	const renderCliente = ({ item }) => (
+	const renderCliente: ListRenderItem<Cliente> = ({ item }) => (
 		<TouchableOpacity
 			style={[styles.clienteCard, { backgroundColor: theme.card, borderColor: theme.border }]}
 			onPress={() => navigation.navigate('DettaglioCliente', { clienteId: item.id })}
@@ -309,30 +313,30 @@ export default function ClientiScreen() {
 		marginHorizontal: 16,
 		marginBottom: 12,
 		borderRadius: 12,
-		flexGrow: 0,
+		flexShrink: 0,
 	},
 	sortContentContainer: {
 		flexDirection: 'row',
 		alignItems: 'center',
 		paddingHorizontal: 16,
-		paddingVertical: 12,
+		paddingVertical: 16,
 		gap: 8,
 	},
 	sortLabel: {
-		fontSize: 14,
+		fontSize: 15,
 		fontWeight: '600',
 		marginRight: 4,
 	},
 	sortButton: {
 		flexDirection: 'row',
 		alignItems: 'center',
-		paddingHorizontal: 12,
-		paddingVertical: 8,
+		paddingHorizontal: 14,
+		paddingVertical: 10,
 		borderRadius: 20,
 		gap: 4,
 	},
 	sortButtonText: {
-		fontSize: 13,
+		fontSize: 14,
 		fontWeight: '600',
 	},
 	listContent: {
