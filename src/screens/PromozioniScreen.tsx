@@ -116,7 +116,7 @@ ${promozione.descrizione ? `${promozione.descrizione}\n\n` : ''}📅 Valida dal 
 		return (
 			<View style={[styles.promoCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
 				{item.foto && (
-					<Image source={{ uri: item.foto }} style={styles.promoFoto} />
+					<Image source={{ uri: item.foto }} style={styles.promoFoto} resizeMode="contain" />
 				)}
 
 				<View style={styles.promoContent}>
@@ -210,10 +210,10 @@ ${promozione.descrizione ? `${promozione.descrizione}\n\n` : ''}📅 Valida dal 
 						<ScrollView style={styles.modalContent} contentContainerStyle={styles.modalContentContainer}>
 							<TouchableOpacity
 								style={[styles.fotoButton, { borderColor: theme.border }]}
-								onPress={() => showImagePickerOptions(setFoto)}
+								onPress={() => showImagePickerOptions(setFoto, { preserveOriginalAspectRatio: true })}
 							>
 								{foto ? (
-									<Image source={{ uri: foto }} style={styles.fotoPreview} />
+									<Image source={{ uri: foto }} style={styles.fotoPreview} resizeMode="contain" />
 								) : (
 									<>
 										<Ionicons name="image" size={40} color={theme.textSecondary} />

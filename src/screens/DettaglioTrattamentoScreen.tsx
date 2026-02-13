@@ -70,7 +70,7 @@ export default function DettaglioTrattamentoScreen() {
 			<View style={styles.fotoSection}>
 				<Text style={[styles.fotoLabel, { color: theme.textSecondary }]}>{title}</Text>
 				{foto ? (
-					<Image source={{ uri: foto }} style={styles.foto} />
+					<Image source={{ uri: foto }} style={styles.foto} resizeMode="contain" />
 				) : (
 					<View style={[styles.fotoPlaceholder, { backgroundColor: theme.border }]}>
 						<Ionicons name="image-outline" size={32} color={theme.textSecondary} />
@@ -202,12 +202,12 @@ export default function DettaglioTrattamentoScreen() {
 	},
 	foto: {
 		width: '100%',
-		aspectRatio: 1,
+		height: 150,
 		borderRadius: 8,
 	},
 	fotoPlaceholder: {
 		width: '100%',
-		aspectRatio: 1,
+		height: 150,
 		borderRadius: 8,
 		justifyContent: 'center',
 		alignItems: 'center',

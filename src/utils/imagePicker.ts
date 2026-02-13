@@ -1,10 +1,17 @@
 import * as ImagePicker from 'expo-image-picker';
-import { Alert, Platform } from 'react-native';
+import { Alert } from 'react-native';
+
+type PickImageOptions = {
+	preserveOriginalAspectRatio?: boolean;
+};
 
 export const pickImage = async (
-	fromCamera: boolean = false
+	fromCamera: boolean = false,
+	options: PickImageOptions = {}
 ): Promise<string | null> => {
 	try {
+		const { preserveOriginalAspectRatio = false } = options;
+
 		// Richiedi permessi
 		if (fromCamera) {
 			const { status } = await ImagePicker.requestCameraPermissionsAsync();
@@ -24,14 +31,14 @@ export const pickImage = async (
 		const result = fromCamera
 			? await ImagePicker.launchCameraAsync({
 				mediaTypes: ['images'],
-				allowsEditing: true,
-				aspect: [1, 1],
+				allowsEditing: !preserveOriginalAspectRatio,
+				...(preserveOriginalAspectRatio ? {} : { aspect: [1, 1] }),
 				quality: 0.7,
 			})
 			: await ImagePicker.launchImageLibraryAsync({
 				mediaTypes: ['images'],
-				allowsEditing: true,
-				aspect: [1, 1],
+				allowsEditing: !preserveOriginalAspectRatio,
+				...(preserveOriginalAspectRatio ? {} : { aspect: [1, 1] }),
 				quality: 0.7,
 			});
 
@@ -48,7 +55,8 @@ export const pickImage = async (
 };
 
 export const showImagePickerOptions = (
-	onImageSelected: (uri: string) => void
+	onImageSelected: (uri: string) => void,
+	options: PickImageOptions = {}
 ) => {
 	Alert.alert(
 		'Seleziona foto',
@@ -57,14 +65,14 @@ export const showImagePickerOptions = (
 			{
 				text: 'Fotocamera',
 				onPress: async () => {
-					const uri = await pickImage(true);
+					const uri = await pickImage(true, options);
 					if (uri) onImageSelected(uri);
 				},
 			},
 			{
 				text: 'Galleria',
 				onPress: async () => {
-					const uri = await pickImage(false);
+					const uri = await pickImage(false, options);
 					if (uri) onImageSelected(uri);
 				},
 			},

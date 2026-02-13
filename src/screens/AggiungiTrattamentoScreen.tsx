@@ -143,7 +143,7 @@ export default function AggiungiTrattamentoScreen() {
 					<Text style={[styles.sectionTitle, { color: theme.text }]}>Foto Prima</Text>
 					<TouchableOpacity
 						style={[styles.fotoButton, { borderColor: theme.border }]}
-						onPress={() => showImagePickerOptions(setFotoPrima)}
+						onPress={() => showImagePickerOptions(setFotoPrima, { preserveOriginalAspectRatio: true })}
 					>
 						{fotoPrima ? (
 							<Text style={[styles.fotoSelectedText, { color: theme.success }]}>
@@ -164,7 +164,7 @@ export default function AggiungiTrattamentoScreen() {
 					<Text style={[styles.sectionTitle, { color: theme.text }]}>Foto Dopo</Text>
 					<TouchableOpacity
 						style={[styles.fotoButton, { borderColor: theme.border }]}
-						onPress={() => showImagePickerOptions(setFotoDopo)}
+						onPress={() => showImagePickerOptions(setFotoDopo, { preserveOriginalAspectRatio: true })}
 					>
 						{fotoDopo ? (
 							<Text style={[styles.fotoSelectedText, { color: theme.success }]}>
