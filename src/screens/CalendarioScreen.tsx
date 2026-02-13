@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
 	View,
 	Text,
@@ -18,92 +18,215 @@ import { checkCompleanni } from '../utils/notifications';
 import { sendBirthdayMessage } from '../utils/whatsapp';
 
 export default function CalendarioScreen() {
-	const { clienti, impostazioni } = useApp();
+	const { clienti, trattamenti, promozioni, impostazioni } = useApp();
 	const theme = impostazioni.temaSuro ? darkTheme : lightTheme;
-	const [markedDates, setMarkedDates] = useState<any>({});
 	const [showBirthdayPopup, setShowBirthdayPopup] = useState(false);
 	const [birthdayClienti, setBirthdayClienti] = useState<any[]>([]);
 	const [calendarKey, setCalendarKey] = useState(0);
 	const today = new Date();
-	const todayString = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+	const getDateKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+	const todayString = getDateKey(today);
+	const [selectedDateKey, setSelectedDateKey] = useState(todayString);
+	const [visibleYear, setVisibleYear] = useState(today.getFullYear());
 	const [showTodayButton, setShowTodayButton] = useState(false);
 
-	useEffect(() => {
-		// Segna compleanni sul calendario
-		const marked: any = {};
-		const today = new Date();
-		today.setHours(0, 0, 0, 0);
+	type EventType = 'trattamento' | 'compleanno' | 'promozione';
+	type CalendarEvent = {
+		id: string;
+		type: EventType;
+		title: string;
+		subtitle?: string;
+		sortTimestamp: number;
+	};
 
-		// Crea la chiave per oggi in formato locale
-		const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+	const eventTypeLabels: Record<EventType, string> = {
+		trattamento: 'Trattamento',
+		compleanno: 'Compleanno',
+		promozione: 'Promozione',
+	};
 
-		// Prima, segna oggi con uno stile speciale
-		marked[todayKey] = {
-			selected: true,
-			selectedColor: theme.primary,
-			marked: false,
+	const parseDate = (dateString?: string) => {
+		if (!dateString) return null;
+		const parsed = new Date(dateString);
+		return isNaN(parsed.getTime()) ? null : parsed;
+	};
+
+	const { markedDates, eventsByDate } = useMemo(() => {
+		const dayEvents: Record<string, CalendarEvent[]> = {};
+		const dayDots: Record<string, Set<EventType>> = {};
+
+		const addEvent = (dateKey: string, event: CalendarEvent) => {
+			if (!dayEvents[dateKey]) {
+				dayEvents[dateKey] = [];
+			}
+			dayEvents[dateKey].push(event);
 		};
 
+		const addDot = (dateKey: string, type: EventType) => {
+			if (!dayDots[dateKey]) {
+				dayDots[dateKey] = new Set<EventType>();
+			}
+			dayDots[dateKey].add(type);
+		};
+
+		trattamenti.forEach(trattamento => {
+			const date = parseDate(trattamento.data);
+			if (!date) return;
+
+			const dateKey = getDateKey(date);
+			const hasTime = date.getHours() !== 0 || date.getMinutes() !== 0;
+			const timeText = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+
+			addEvent(dateKey, {
+				id: `trattamento-${trattamento.id}`,
+				type: 'trattamento',
+				title: trattamento.nome,
+				subtitle: hasTime ? `${trattamento.clienteNome} • ${timeText}` : trattamento.clienteNome,
+				sortTimestamp: date.getTime(),
+			});
+			addDot(dateKey, 'trattamento');
+		});
+
+		promozioni.forEach(promozione => {
+			const startDate = parseDate(promozione.dataInizio);
+			const endDate = parseDate(promozione.dataFine);
+
+			if (!startDate && !endDate) return;
+
+			const startKey = startDate ? getDateKey(startDate) : null;
+			const endKey = endDate ? getDateKey(endDate) : null;
+
+			if (startKey && endKey && startKey === endKey) {
+				addEvent(startKey, {
+					id: `promozione-${promozione.id}-single`,
+					type: 'promozione',
+					title: promozione.nome,
+					subtitle: 'Inizio/Fine promozione',
+					sortTimestamp: startDate!.getTime(),
+				});
+				addDot(startKey, 'promozione');
+				return;
+			}
+
+			if (startKey && startDate) {
+				addEvent(startKey, {
+					id: `promozione-${promozione.id}-start`,
+					type: 'promozione',
+					title: promozione.nome,
+					subtitle: 'Inizio promozione',
+					sortTimestamp: startDate.getTime(),
+				});
+				addDot(startKey, 'promozione');
+			}
+
+			if (endKey && endDate) {
+				addEvent(endKey, {
+					id: `promozione-${promozione.id}-end`,
+					type: 'promozione',
+					title: promozione.nome,
+					subtitle: 'Fine promozione',
+					sortTimestamp: endDate.getTime(),
+				});
+				addDot(endKey, 'promozione');
+			}
+		});
+
 		clienti.forEach(cliente => {
-			if (!cliente.dataNascita) return;
+			const birthDate = parseDate(cliente.dataNascita);
+			if (!birthDate) return;
 
-			const birthDate = new Date(cliente.dataNascita);
-
-			// Valida la data
-			if (isNaN(birthDate.getTime())) return;
-
-			// Calcola il prossimo compleanno (questo anno o prossimo)
-			let nextBirthday = new Date(
-				today.getFullYear(),
+			const birthdayInVisibleYear = new Date(
+				visibleYear,
 				birthDate.getMonth(),
 				birthDate.getDate()
 			);
-			nextBirthday.setHours(0, 0, 0, 0);
 
-			// Se il compleanno di quest'anno è passato, usa quello dell'anno prossimo
-			if (nextBirthday < today) {
-				nextBirthday = new Date(
-					today.getFullYear() + 1,
-					birthDate.getMonth(),
-					birthDate.getDate()
-				);
-			}
+			if (isNaN(birthdayInVisibleYear.getTime())) return;
 
-			// Valida la data risultante
-			if (isNaN(nextBirthday.getTime())) return;
-
-			try {
-				// Crea la chiave per il compleanno in formato locale
-				const dateKey = `${nextBirthday.getFullYear()}-${String(nextBirthday.getMonth() + 1).padStart(2, '0')}-${String(nextBirthday.getDate()).padStart(2, '0')}`;
-
-				// Se è oggi, combina lo stile
-				if (dateKey === todayKey) {
-					marked[dateKey] = {
-						selected: true,
-						selectedColor: theme.primary,
-						marked: true,
-						dotColor: '#FFD700',
-						selectedDotColor: '#FFD700',
-					};
-				} else {
-					marked[dateKey] = {
-						marked: true,
-						dotColor: theme.primary,
-					};
-				}
-			} catch (error) {
-				console.error(`Data non valida per cliente ${cliente.nome}:`, cliente.dataNascita);
-			}
+			const dateKey = getDateKey(birthdayInVisibleYear);
+			addEvent(dateKey, {
+				id: `compleanno-${cliente.id}-${visibleYear}`,
+				type: 'compleanno',
+				title: cliente.nome,
+				subtitle: 'Ricorrenza compleanno',
+				sortTimestamp: birthdayInVisibleYear.getTime(),
+			});
+			addDot(dateKey, 'compleanno');
 		});
-		setMarkedDates(marked);
 
+		Object.keys(dayEvents).forEach(dateKey => {
+			dayEvents[dateKey].sort((a, b) => {
+				if (a.sortTimestamp !== b.sortTimestamp) {
+					return a.sortTimestamp - b.sortTimestamp;
+				}
+
+				const typeOrder: Record<EventType, number> = {
+					trattamento: 1,
+					promozione: 2,
+					compleanno: 3,
+				};
+
+				return typeOrder[a.type] - typeOrder[b.type];
+			});
+		});
+
+		const dotsByType: Record<EventType, string> = {
+			trattamento: theme.primary,
+			compleanno: theme.accent,
+			promozione: theme.textSecondary,
+		};
+
+		const marks: Record<string, any> = {};
+		Object.keys(dayDots).forEach(dateKey => {
+			marks[dateKey] = {
+				dots: Array.from(dayDots[dateKey]).map(type => ({
+					key: type,
+					color: dotsByType[type],
+				})),
+			};
+		});
+
+		marks[selectedDateKey] = {
+			...(marks[selectedDateKey] || {}),
+			selected: true,
+			selectedColor: theme.primary,
+			selectedTextColor: '#FFFFFF',
+		};
+
+		return {
+			markedDates: marks,
+			eventsByDate: dayEvents,
+		};
+	}, [clienti, promozioni, selectedDateKey, theme.accent, theme.primary, theme.textSecondary, trattamenti, visibleYear]);
+
+	const selectedDateLabel = useMemo(() => {
+		const [year, month, day] = selectedDateKey.split('-').map(Number);
+		const selectedDate = new Date(year, month - 1, day);
+		if (isNaN(selectedDate.getTime())) return selectedDateKey;
+
+		return selectedDate.toLocaleDateString('it-IT', {
+			day: '2-digit',
+			month: '2-digit',
+			year: 'numeric',
+		});
+	}, [selectedDateKey]);
+
+	const selectedDayEvents = useMemo(() => eventsByDate[selectedDateKey] || [], [eventsByDate, selectedDateKey]);
+
+	const getEventBadgeColor = (type: EventType) => {
+		if (type === 'trattamento') return theme.primary;
+		if (type === 'compleanno') return theme.accent;
+		return theme.textSecondary;
+	};
+
+	useEffect(() => {
 		// Controlla compleanni di oggi
 		const todayBirthdays = checkCompleanni(clienti);
 		if (todayBirthdays.length > 0) {
 			setBirthdayClienti(todayBirthdays);
 			setShowBirthdayPopup(true);
 		}
-	}, [clienti, theme]);
+	}, [clienti]);
 
 	return (
 		<SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'left', 'right']}>
@@ -115,7 +238,12 @@ export default function CalendarioScreen() {
 				<Calendar
 					key={calendarKey}
 					markedDates={markedDates}
+					markingType="multi-dot"
+					onDayPress={(day) => {
+						setSelectedDateKey(day.dateString);
+					}}
 					onMonthChange={(month) => {
+						setVisibleYear(month.year);
 						const monthString = `${month.year}-${String(month.month).padStart(2, '0')}`;
 						const todayMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
 						setShowTodayButton(monthString !== todayMonth);
@@ -142,6 +270,8 @@ export default function CalendarioScreen() {
 						style={[styles.todayButton, { backgroundColor: theme.primary }]}
 						onPress={() => {
 							setCalendarKey(prev => prev + 1);
+							setVisibleYear(today.getFullYear());
+							setSelectedDateKey(todayString);
 							setShowTodayButton(false);
 						}}
 					>
@@ -152,73 +282,29 @@ export default function CalendarioScreen() {
 
 				<View style={[styles.upcomingCard, { backgroundColor: theme.card }]}>
 					<Text style={[styles.sectionTitle, { color: theme.text }]}>
-						Prossimi Compleanni
+						Eventi del giorno
 					</Text>
-					{(() => {
-						const today = new Date();
+					<Text style={[styles.selectedDateText, { color: theme.textSecondary }]}>
+						{selectedDateLabel}
+					</Text>
 
-						return clienti
-							.filter(cliente => {
-								if (!cliente.dataNascita) return false;
-								const birthDate = new Date(cliente.dataNascita);
-								return !isNaN(birthDate.getTime());
-							})
-							.map(cliente => {
-								const birthDate = new Date(cliente.dataNascita);
-								const birthdayThisYear = new Date(
-									today.getFullYear(),
-									birthDate.getMonth(),
-									birthDate.getDate()
-								);
-
-								// Calcola giorni fino al compleanno
-								let daysUntil;
-								if (birthdayThisYear >= today) {
-									daysUntil = Math.ceil((birthdayThisYear.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-								} else {
-									const birthdayNextYear = new Date(
-										today.getFullYear() + 1,
-										birthDate.getMonth(),
-										birthDate.getDate()
-									);
-									daysUntil = Math.ceil((birthdayNextYear.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-								}
-
-								return {
-									...cliente,
-									birthDate,
-									daysUntil,
-								};
-							})
-							.sort((a, b) => a.daysUntil - b.daysUntil)
-							.slice(0, 10)
-							.map(cliente => {
-								const isToday = cliente.daysUntil === 0;
-								return (
-									<View key={cliente.id} style={[
-										styles.birthdayItem,
-										{ borderBottomColor: theme.border },
-										isToday && { backgroundColor: theme.accent }
-									]}>
-										<View style={styles.birthdayInfo}>
-											<Text style={[styles.birthdayName, { color: theme.text }]}>
-												{cliente.nome} {isToday && '🎉'}
-											</Text>
-											<Text style={[styles.birthdayDays, { color: theme.textSecondary }]}>
-												{isToday
-													? 'Oggi!'
-													: cliente.daysUntil === 1
-														? 'Domani'
-														: `Tra ${cliente.daysUntil} giorni`}
-											</Text>
-										</View>
-										<Text style={[styles.birthdayDate, { color: theme.textSecondary }]}>
-											{cliente.birthDate.getDate()}/{cliente.birthDate.getMonth() + 1}
-										</Text>
-									</View>
-								);
-							});
-					})()}
+					{selectedDayEvents.length === 0 ? (
+						<Text style={[styles.emptyStateText, { color: theme.textSecondary }]}>
+							Nessun evento per questa data.
+						</Text>
+					) : (
+						selectedDayEvents.map(event => (
+							<View key={event.id} style={[styles.eventItem, { borderBottomColor: theme.border }]}>
+								<View style={[styles.eventTypeBadge, { backgroundColor: getEventBadgeColor(event.type) }]}>
+									<Text style={styles.eventTypeText}>{eventTypeLabels[event.type]}</Text>
+								</View>
+								<Text style={[styles.eventTitle, { color: theme.text }]}>{event.title}</Text>
+								{event.subtitle ? (
+									<Text style={[styles.eventSubtitle, { color: theme.textSecondary }]}>{event.subtitle}</Text>
+								) : null}
+							</View>
+						))
+					)}
 				</View>
 			</ScrollView>
 
@@ -313,32 +399,42 @@ export default function CalendarioScreen() {
 	sectionTitle: {
 		fontSize: 18,
 		fontWeight: 'bold',
-		marginBottom: 12,
-	},
-	birthdayItem: {
-		flexDirection: 'row',
-		justifyContent: 'space-between',
-		alignItems: 'center',
-		paddingVertical: 12,
-		paddingHorizontal: 12,
-		borderBottomWidth: 1,
-		borderRadius: 8,
 		marginBottom: 4,
 	},
-	birthdayInfo: {
-		flex: 1,
+	selectedDateText: {
+		fontSize: 13,
+		marginBottom: 10,
 	},
-	birthdayName: {
+	eventItem: {
+		paddingVertical: 12,
+		paddingHorizontal: 8,
+		borderBottomWidth: 1,
+		borderRadius: 8,
+		marginBottom: 6,
+	},
+	eventTypeBadge: {
+		alignSelf: 'flex-start',
+		paddingHorizontal: 8,
+		paddingVertical: 4,
+		borderRadius: 999,
+		marginBottom: 8,
+	},
+	eventTypeText: {
+		color: '#FFF',
+		fontSize: 11,
+		fontWeight: '700',
+	},
+	eventTitle: {
 		fontSize: 16,
 		fontWeight: '600',
 	},
-	birthdayDays: {
-		fontSize: 12,
+	eventSubtitle: {
+		fontSize: 13,
 		marginTop: 2,
 	},
-	birthdayDate: {
+	emptyStateText: {
 		fontSize: 14,
-		fontWeight: '500',
+		paddingVertical: 8,
 	},
 	popupOverlay: {
 		flex: 1,
