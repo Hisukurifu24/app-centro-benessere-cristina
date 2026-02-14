@@ -52,6 +52,8 @@ const STORAGE_KEYS = {
 	IMPOSTAZIONI: '@impostazioni',
 };
 
+const normalizeNome = (value: string) => value.trim().toLowerCase();
+
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
 	const [clienti, setClienti] = useState<Cliente[]>([]);
 	const [trattamenti, setTrattamenti] = useState<Trattamento[]>([]);
@@ -148,8 +150,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
 	// TIPI TRATTAMENTO
 	const addTipoTrattamento = async (tipo: Omit<TipoTrattamento, 'id' | 'createdAt'>) => {
+		const nomeNormalizzato = normalizeNome(tipo.nome);
+		const nomeDuplicato = tipiTrattamento.some(t => normalizeNome(t.nome) === nomeNormalizzato);
+
+		if (!nomeNormalizzato) {
+			throw new Error('Il nome del tipo di trattamento è obbligatorio');
+		}
+
+		if (nomeDuplicato) {
+			throw new Error('Esiste già un tipo di trattamento con questo nome');
+		}
+
 		const nuovoTipo: TipoTrattamento = {
-			...tipo,
+			nome: tipo.nome.trim(),
+			descrizioneDefault: tipo.descrizioneDefault.trim(),
 			id: Date.now().toString(),
 			createdAt: new Date().toISOString(),
 		};
@@ -159,9 +173,56 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 	};
 
 	const updateTipoTrattamento = async (id: string, tipoUpdate: Partial<TipoTrattamento>) => {
-		const nuoviTipi = tipiTrattamento.map(t => t.id === id ? { ...t, ...tipoUpdate } : t);
+		const tipoCorrente = tipiTrattamento.find(t => t.id === id);
+
+		if (!tipoCorrente) {
+			throw new Error('Tipo di trattamento non trovato');
+		}
+
+		const prossimoNome = (tipoUpdate.nome ?? tipoCorrente.nome).trim();
+		const nomeNormalizzato = normalizeNome(prossimoNome);
+
+		if (!nomeNormalizzato) {
+			throw new Error('Il nome del tipo di trattamento è obbligatorio');
+		}
+
+		const nomeDuplicato = tipiTrattamento.some(
+			t => t.id !== id && normalizeNome(t.nome) === nomeNormalizzato
+		);
+
+		if (nomeDuplicato) {
+			throw new Error('Esiste già un tipo di trattamento con questo nome');
+		}
+
+		const vecchioNomeNormalizzato = normalizeNome(tipoCorrente.nome);
+
+		const nuoviTipi = tipiTrattamento.map(t =>
+			t.id === id
+				? {
+					...t,
+					...tipoUpdate,
+					nome: prossimoNome,
+					descrizioneDefault: (tipoUpdate.descrizioneDefault ?? t.descrizioneDefault).trim(),
+				}
+				: t
+		);
+
+		let nuoviTrattamenti = trattamenti;
+		if (vecchioNomeNormalizzato !== nomeNormalizzato) {
+			nuoviTrattamenti = trattamenti.map(trattamento =>
+				normalizeNome(trattamento.nome) === vecchioNomeNormalizzato
+					? { ...trattamento, nome: prossimoNome }
+					: trattamento
+			);
+		}
+
 		setTipiTrattamento(nuoviTipi);
-		await AsyncStorage.setItem(STORAGE_KEYS.TIPI_TRATTAMENTO, JSON.stringify(nuoviTipi));
+		setTrattamenti(nuoviTrattamenti);
+
+		await Promise.all([
+			AsyncStorage.setItem(STORAGE_KEYS.TIPI_TRATTAMENTO, JSON.stringify(nuoviTipi)),
+			AsyncStorage.setItem(STORAGE_KEYS.TRATTAMENTI, JSON.stringify(nuoviTrattamenti)),
+		]);
 	};
 
 	const deleteTipoTrattamento = async (id: string) => {

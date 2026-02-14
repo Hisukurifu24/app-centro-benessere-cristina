@@ -17,12 +17,23 @@ import { useApp } from '../context/AppContext';
 import { lightTheme, darkTheme } from '../theme/colors';
 import { showImagePickerOptions } from '../utils/imagePicker';
 import DatePicker from '../components/DatePicker';
+import { TipoTrattamento } from '../types';
+
+const normalizeNome = (value: string) => value.trim().toLowerCase();
 
 export default function AggiungiTrattamentoScreen() {
 	const navigation = useNavigation();
 	const route = useRoute();
 	const { clienteId } = route.params as { clienteId: string };
-	const { addTrattamento, clienti, tipiTrattamento, addTipoTrattamento, impostazioni } = useApp();
+	const {
+		addTrattamento,
+		clienti,
+		tipiTrattamento,
+		addTipoTrattamento,
+		updateTipoTrattamento,
+		deleteTipoTrattamento,
+		impostazioni,
+	} = useApp();
 	const theme = impostazioni.temaSuro ? darkTheme : lightTheme;
 
 	const cliente = clienti.find(c => c.id === clienteId);
@@ -34,6 +45,7 @@ export default function AggiungiTrattamentoScreen() {
 	const [fotoDopo, setFotoDopo] = useState<string | undefined>();
 	const [showTipiModal, setShowTipiModal] = useState(false);
 	const [showAddTipoModal, setShowAddTipoModal] = useState(false);
+	const [editingTipoId, setEditingTipoId] = useState<string | null>(null);
 	const [nuovoTipoNome, setNuovoTipoNome] = useState('');
 	const [nuovoTipoDescrizione, setNuovoTipoDescrizione] = useState('');
 
@@ -63,26 +75,93 @@ export default function AggiungiTrattamentoScreen() {
 		}
 	};
 
-	const handleAddTipoTrattamento = async () => {
+	const resetTipoForm = () => {
+		setEditingTipoId(null);
+		setNuovoTipoNome('');
+		setNuovoTipoDescrizione('');
+	};
+
+	const closeTipoFormModal = () => {
+		setShowAddTipoModal(false);
+		resetTipoForm();
+	};
+
+	const handleSaveTipoTrattamento = async () => {
 		if (!nuovoTipoNome.trim()) {
 			Alert.alert('Errore', 'Il nome del tipo di trattamento è obbligatorio');
 			return;
 		}
 
 		try {
+			if (editingTipoId) {
+				const tipoCorrente = tipiTrattamento.find(t => t.id === editingTipoId);
+				const vecchioNome = tipoCorrente?.nome;
+
+				await updateTipoTrattamento(editingTipoId, {
+					nome: nuovoTipoNome.trim(),
+					descrizioneDefault: nuovoTipoDescrizione.trim(),
+				});
+
+				if (vecchioNome && normalizeNome(nome) === normalizeNome(vecchioNome)) {
+					setNome(nuovoTipoNome.trim());
+					setDescrizione(nuovoTipoDescrizione.trim());
+				}
+
+				closeTipoFormModal();
+				Alert.alert('Successo', 'Tipo di trattamento modificato');
+				return;
+			}
+
 			await addTipoTrattamento({
 				nome: nuovoTipoNome.trim(),
 				descrizioneDefault: nuovoTipoDescrizione.trim(),
 			});
 
-			setNuovoTipoNome('');
-			setNuovoTipoDescrizione('');
-			setShowAddTipoModal(false);
+			closeTipoFormModal();
 			Alert.alert('Successo', 'Tipo di trattamento aggiunto');
 		} catch (error) {
-			Alert.alert('Errore', 'Impossibile aggiungere il tipo di trattamento');
+			const errorMessage = error instanceof Error ? error.message : 'Impossibile salvare il tipo di trattamento';
+			Alert.alert('Errore', errorMessage);
 		}
-	}; const selectTipoTrattamento = (tipo: any) => {
+	};
+
+	const openAddTipoModal = () => {
+		setShowTipiModal(false);
+		resetTipoForm();
+		setShowAddTipoModal(true);
+	};
+
+	const handleEditTipoTrattamento = (tipo: TipoTrattamento) => {
+		setShowTipiModal(false);
+		setEditingTipoId(tipo.id);
+		setNuovoTipoNome(tipo.nome);
+		setNuovoTipoDescrizione(tipo.descrizioneDefault || '');
+		setShowAddTipoModal(true);
+	};
+
+	const handleDeleteTipoTrattamento = (tipo: TipoTrattamento) => {
+		Alert.alert(
+			'Elimina tipo trattamento',
+			`Vuoi eliminare "${tipo.nome}"? I trattamenti già registrati resteranno invariati.`,
+			[
+				{ text: 'Annulla', style: 'cancel' },
+				{
+					text: 'Elimina',
+					style: 'destructive',
+					onPress: async () => {
+						try {
+							await deleteTipoTrattamento(tipo.id);
+							Alert.alert('Successo', 'Tipo di trattamento eliminato');
+						} catch {
+							Alert.alert('Errore', 'Impossibile eliminare il tipo di trattamento');
+						}
+					},
+				},
+			]
+		);
+	};
+
+	const selectTipoTrattamento = (tipo: TipoTrattamento) => {
 		setNome(tipo.nome);
 		setDescrizione(tipo.descrizioneDefault);
 		setShowTipiModal(false);
@@ -201,17 +280,34 @@ export default function AggiungiTrattamentoScreen() {
 						<FlatList
 							data={tipiTrattamento}
 							renderItem={({ item }) => (
-								<TouchableOpacity
-									style={[styles.tipoItem, { borderBottomColor: theme.border }]}
-									onPress={() => selectTipoTrattamento(item)}
-								>
-									<Text style={[styles.tipoNome, { color: theme.text }]}>{item.nome}</Text>
-									{item.descrizioneDefault && (
-										<Text style={[styles.tipoDescrizione, { color: theme.textSecondary }]}>
-											{item.descrizioneDefault}
-										</Text>
-									)}
-								</TouchableOpacity>
+								<View style={[styles.tipoRow, { borderBottomColor: theme.border }]}>
+									<TouchableOpacity
+										style={styles.tipoInfoTouchable}
+										onPress={() => selectTipoTrattamento(item)}
+									>
+										<Text style={[styles.tipoNome, { color: theme.text }]}>{item.nome}</Text>
+										{item.descrizioneDefault && (
+											<Text style={[styles.tipoDescrizione, { color: theme.textSecondary }]}>
+												{item.descrizioneDefault}
+											</Text>
+										)}
+									</TouchableOpacity>
+
+									<View style={styles.tipoActions}>
+										<TouchableOpacity
+											style={styles.tipoActionButton}
+											onPress={() => handleEditTipoTrattamento(item)}
+										>
+											<Ionicons name="pencil" size={18} color={theme.primary} />
+										</TouchableOpacity>
+										<TouchableOpacity
+											style={styles.tipoActionButton}
+											onPress={() => handleDeleteTipoTrattamento(item)}
+										>
+											<Ionicons name="trash" size={18} color={theme.error} />
+										</TouchableOpacity>
+									</View>
+								</View>
 							)}
 							keyExtractor={item => item.id}
 							ListEmptyComponent={
@@ -223,10 +319,7 @@ export default function AggiungiTrattamentoScreen() {
 
 						<TouchableOpacity
 							style={[styles.addTipoModalButton, { backgroundColor: theme.primary }]}
-							onPress={() => {
-								setShowTipiModal(false);
-								setShowAddTipoModal(true);
-							}}
+							onPress={openAddTipoModal}
 						>
 							<Ionicons name="add" size={20} color="#FFF" />
 							<Text style={styles.addTipoModalButtonText}>Aggiungi nuovo tipo</Text>
@@ -240,13 +333,15 @@ export default function AggiungiTrattamentoScreen() {
 				visible={showAddTipoModal}
 				transparent
 				animationType="slide"
-				onRequestClose={() => setShowAddTipoModal(false)}
+				onRequestClose={closeTipoFormModal}
 			>
 				<View style={styles.modalOverlay}>
 					<View style={[styles.modalContent, { backgroundColor: theme.card }]}>
 						<View style={styles.modalHeader}>
-							<Text style={[styles.modalTitle, { color: theme.text }]}>Nuovo Tipo</Text>
-							<TouchableOpacity onPress={() => setShowAddTipoModal(false)}>
+							<Text style={[styles.modalTitle, { color: theme.text }]}>
+								{editingTipoId ? 'Modifica Tipo' : 'Nuovo Tipo'}
+							</Text>
+							<TouchableOpacity onPress={closeTipoFormModal}>
 								<Ionicons name="close" size={28} color={theme.text} />
 							</TouchableOpacity>
 						</View>
@@ -271,9 +366,9 @@ export default function AggiungiTrattamentoScreen() {
 							/>
 							<TouchableOpacity
 								style={[styles.modalSaveButton, { backgroundColor: theme.primary }]}
-								onPress={handleAddTipoTrattamento}
+								onPress={handleSaveTipoTrattamento}
 							>
-								<Text style={styles.modalSaveButtonText}>Salva</Text>
+								<Text style={styles.modalSaveButtonText}>{editingTipoId ? 'Aggiorna' : 'Salva'}</Text>
 							</TouchableOpacity>
 						</View>
 					</View>
@@ -281,7 +376,9 @@ export default function AggiungiTrattamentoScreen() {
 			</Modal>
 		</SafeAreaView>
 	);
-} const styles = StyleSheet.create({
+}
+
+const styles = StyleSheet.create({
 	container: {
 		flex: 1,
 	},
@@ -394,6 +491,26 @@ export default function AggiungiTrattamentoScreen() {
 	modalTitle: {
 		fontSize: 20,
 		fontWeight: 'bold',
+	},
+	tipoRow: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		paddingVertical: 8,
+		paddingHorizontal: 16,
+		borderBottomWidth: 1,
+	},
+	tipoInfoTouchable: {
+		flex: 1,
+		paddingVertical: 8,
+	},
+	tipoActions: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		marginLeft: 12,
+	},
+	tipoActionButton: {
+		padding: 8,
+		marginLeft: 4,
 	},
 	tipoItem: {
 		padding: 16,
