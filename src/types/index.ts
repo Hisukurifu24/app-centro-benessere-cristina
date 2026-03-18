@@ -7,6 +7,7 @@ export interface Cliente {
 	indirizzo: string;
 	foto?: string;
 	autocura: string;
+	note: string;
 	createdAt: string;
 }
 

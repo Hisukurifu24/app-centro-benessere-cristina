@@ -28,6 +28,7 @@ export const useSeedData = () => {
 					dataNascita: '1985-03-15',
 					indirizzo: 'Via Roma 10, Milano',
 					autocura: 'Pelle sensibile, preferisce prodotti naturali',
+					note: '',
 				},
 				{
 					nome: 'Laura Bianchi',
@@ -36,6 +37,7 @@ export const useSeedData = () => {
 					dataNascita: '1990-07-22',
 					indirizzo: 'Corso Italia 25, Milano',
 					autocura: 'Usa crema idratante quotidianamente',
+					note: '',
 				},
 				{
 					nome: 'Giulia Verdi',
@@ -44,6 +46,7 @@ export const useSeedData = () => {
 					dataNascita: '1988-11-30',
 					indirizzo: 'Piazza Duomo 5, Milano',
 					autocura: '',
+					note: '',
 				},
 			];
 

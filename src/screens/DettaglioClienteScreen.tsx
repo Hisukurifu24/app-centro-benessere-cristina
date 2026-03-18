@@ -233,6 +233,27 @@ export default function DettaglioClienteScreen() {
 					/>
 				</View>
 
+				<View style={[styles.autocuraCard, { backgroundColor: theme.card }]}>
+					<Text style={[styles.sectionTitle, { color: theme.text }]}>Note</Text>
+					<TextInput
+						style={[styles.autocuraInput, {
+							color: theme.text,
+							backgroundColor: isEditing ? theme.background : 'transparent',
+							borderColor: theme.border,
+						}]}
+						value={editedCliente?.note}
+						onChangeText={(text) =>
+							setEditedCliente(prev => prev ? { ...prev, note: text } : prev)
+						}
+						multiline
+						numberOfLines={6}
+						textAlignVertical="top"
+						placeholder="Note aggiuntive sul cliente..."
+						placeholderTextColor={theme.textSecondary}
+						editable={isEditing}
+					/>
+				</View>
+
 				<View style={[styles.trattamentiCard, { backgroundColor: theme.card }]}>
 					<View style={styles.trattamentiHeader}>
 						<Text style={[styles.sectionTitle, { color: theme.text }]}>

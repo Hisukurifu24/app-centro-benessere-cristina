@@ -53,6 +53,10 @@ const STORAGE_KEYS = {
 };
 
 const normalizeNome = (value: string) => value.trim().toLowerCase();
+const normalizeCliente = (cliente: Cliente): Cliente => ({
+	...cliente,
+	note: cliente.note ?? '',
+});
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
 	const [clienti, setClienti] = useState<Cliente[]>([]);
@@ -81,7 +85,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 				AsyncStorage.getItem(STORAGE_KEYS.IMPOSTAZIONI),
 			]);
 
-			if (clientiData) setClienti(JSON.parse(clientiData));
+			if (clientiData) {
+				const parsedClienti = JSON.parse(clientiData) as Cliente[];
+				setClienti(parsedClienti.map(normalizeCliente));
+			}
 			if (trattamentiData) setTrattamenti(JSON.parse(trattamentiData));
 			if (promozioniData) setPromozioni(JSON.parse(promozioniData));
 			if (tipiData) setTipiTrattamento(JSON.parse(tipiData));
@@ -99,6 +106,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 	const addCliente = async (cliente: Omit<Cliente, 'id' | 'createdAt'>) => {
 		const nuovoCliente: Cliente = {
 			...cliente,
+			note: cliente.note ?? '',
 			id: Date.now().toString(),
 			createdAt: new Date().toISOString(),
 		};
@@ -270,13 +278,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 		tipiTrattamento: TipoTrattamento[];
 	}) => {
 		try {
-			setClienti(data.clienti);
+			const normalizedClienti = data.clienti.map(normalizeCliente);
+			setClienti(normalizedClienti);
 			setTrattamenti(data.trattamenti);
 			setPromozioni(data.promozioni);
 			setTipiTrattamento(data.tipiTrattamento);
 
 			await Promise.all([
-				AsyncStorage.setItem(STORAGE_KEYS.CLIENTI, JSON.stringify(data.clienti)),
+				AsyncStorage.setItem(STORAGE_KEYS.CLIENTI, JSON.stringify(normalizedClienti)),
 				AsyncStorage.setItem(STORAGE_KEYS.TRATTAMENTI, JSON.stringify(data.trattamenti)),
 				AsyncStorage.setItem(STORAGE_KEYS.PROMOZIONI, JSON.stringify(data.promozioni)),
 				AsyncStorage.setItem(STORAGE_KEYS.TIPI_TRATTAMENTO, JSON.stringify(data.tipiTrattamento)),

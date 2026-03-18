@@ -51,6 +51,7 @@ export default function AggiungiClienteScreen() {
 				indirizzo: indirizzo.trim(),
 				foto,
 				autocura: '',
+				note: '',
 			});
 
 			Alert.alert('Successo', 'Cliente aggiunto con successo', [
