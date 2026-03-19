@@ -13,13 +13,13 @@ import {
 	Share,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import * as Sharing from 'expo-sharing';
 import { Ionicons } from '@expo/vector-icons';
 import { useApp } from '../context/AppContext';
 import { lightTheme, darkTheme } from '../theme/colors';
 import { formatDate } from '../utils/helpers';
 import { showImagePickerOptions } from '../utils/imagePicker';
 import DatePicker from '../components/DatePicker';
+import { Promozione } from '../types';
 
 export default function PromozioniScreen() {
 	const { promozioni, addPromozione, deletePromozione, impostazioni } = useApp();
@@ -32,30 +32,24 @@ export default function PromozioniScreen() {
 	const [dataFine, setDataFine] = useState(new Date());
 	const [foto, setFoto] = useState<string | undefined>();
 
-	const handleShare = async (promozione: any) => {
+	const handleShare = async (promozione: Promozione) => {
 		try {
-			// Crea il messaggio di testo della promozione
 			const message = `${promozione.nome}
 
 ${promozione.descrizione ? `${promozione.descrizione}\n\n` : ''}📅 Valida dal ${formatDate(promozione.dataInizio)} al ${formatDate(promozione.dataFine)}`;
 
-			// Se c'è una foto, prova a condividerla con il testo
-			if (promozione.foto) {
-				const canShare = await Sharing.isAvailableAsync();
-				if (canShare) {
-					await Sharing.shareAsync(promozione.foto, {
-						dialogTitle: `Condividi: ${promozione.nome}`,
-						mimeType: 'image/*',
-						UTI: 'public.image',
-					});
+			const sharePayload = promozione.foto
+				? {
+					message,
+					title: promozione.nome,
+					url: promozione.foto,
 				}
-			}
+				: {
+					message,
+					title: promozione.nome,
+				};
 
-			// Condividi sempre anche il testo
-			await Share.share({
-				message: message,
-				title: promozione.nome,
-			});
+			await Share.share(sharePayload);
 		} catch (error) {
 			console.error('Errore condivisione:', error);
 			Alert.alert('Errore', 'Impossibile condividere la promozione');
@@ -108,7 +102,7 @@ ${promozione.descrizione ? `${promozione.descrizione}\n\n` : ''}📅 Valida dal 
 		);
 	};
 
-	const renderPromozione = ({ item }: { item: any }) => {
+	const renderPromozione = ({ item }: { item: Promozione }) => {
 		const now = new Date();
 		const endDate = new Date(item.dataFine);
 		const isExpired = endDate < now;

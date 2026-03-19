@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
 	View,
 	Text,
@@ -12,22 +12,73 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { useApp } from '../context/AppContext';
 import { lightTheme, darkTheme } from '../theme/colors';
 import { formatDate, calculateAge } from '../utils/helpers';
 import { showImagePickerOptions } from '../utils/imagePicker';
 import DatePicker from '../components/DatePicker';
+import { Trattamento } from '../types';
+import { RootStackParamList } from '../types/navigation';
 
 export default function DettaglioClienteScreen() {
-	const navigation = useNavigation();
+	const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 	const route = useRoute();
 	const { clienteId } = route.params as { clienteId: string };
 	const { clienti, trattamenti, updateCliente, deleteCliente, impostazioni } = useApp();
 	const theme = impostazioni.temaSuro ? darkTheme : lightTheme;
+	const minimumDataNascita = new Date(1900, 0, 1);
 
 	const cliente = clienti.find(c => c.id === clienteId);
 	const trattamentiCliente = trattamenti.filter(t => t.clienteId === clienteId);
+
+	const trattamentoPiuUsato = useMemo(() => {
+		if (trattamentiCliente.length === 0) {
+			return {
+				nomi: [] as string[],
+				conteggio: 0,
+				hasPariMerito: false,
+				hasData: false,
+			};
+		}
+
+		const conteggiPerNome = trattamentiCliente.reduce((acc, trattamento) => {
+			const nomeNormalizzato = trattamento.nome.trim().toLowerCase();
+			if (!nomeNormalizzato) {
+				return acc;
+			}
+
+			if (!acc[nomeNormalizzato]) {
+				acc[nomeNormalizzato] = { nomeDisplay: trattamento.nome.trim(), count: 0 };
+			}
+
+			acc[nomeNormalizzato].count += 1;
+			return acc;
+		}, {} as Record<string, { nomeDisplay: string; count: number }>);
+
+		const conteggi = Object.values(conteggiPerNome);
+		if (conteggi.length === 0) {
+			return {
+				nomi: [] as string[],
+				conteggio: 0,
+				hasPariMerito: false,
+				hasData: false,
+			};
+		}
+
+		const maxConteggio = Math.max(...conteggi.map(item => item.count));
+		const nomiPiuUsati = conteggi
+			.filter(item => item.count === maxConteggio)
+			.map(item => item.nomeDisplay);
+
+		return {
+			nomi: nomiPiuUsati,
+			conteggio: maxConteggio,
+			hasPariMerito: nomiPiuUsati.length > 1,
+			hasData: true,
+		};
+	}, [trattamentiCliente]);
 
 	const [isEditing, setIsEditing] = useState(false);
 	const [editedCliente, setEditedCliente] = useState(cliente);
@@ -74,7 +125,7 @@ export default function DettaglioClienteScreen() {
 		);
 	};
 
-	const renderTrattamento = ({ item }) => (
+	const renderTrattamento = ({ item }: { item: Trattamento }) => (
 		<TouchableOpacity
 			style={[styles.trattamentoCard, { backgroundColor: theme.card, borderColor: theme.border }]}
 			onPress={() => navigation.navigate('DettaglioTrattamento', { trattamentoId: item.id })}
@@ -186,6 +237,7 @@ export default function DettaglioClienteScreen() {
 										setEditedCliente(prev => prev ? { ...prev, dataNascita: date.toISOString() } : prev)
 									}
 									theme={theme}
+									minimumDate={minimumDataNascita}
 									maximumDate={new Date()}
 								/>
 							</View>
@@ -284,6 +336,30 @@ export default function DettaglioClienteScreen() {
 					)}
 				</View>
 
+				<View style={[styles.autocuraCard, { backgroundColor: theme.card }]}>
+					<View style={styles.mostUsedHeader}>
+						<Ionicons name="trending-up" size={20} color={theme.primary} />
+						<Text style={[styles.sectionTitle, styles.mostUsedTitle, { color: theme.text }]}>Trattamento più usato</Text>
+					</View>
+
+					{!trattamentoPiuUsato.hasData ? (
+						<Text style={[styles.noTrattamenti, styles.mostUsedEmpty, { color: theme.textSecondary }]}>Nessun trattamento registrato</Text>
+					) : (
+						<View style={styles.mostUsedContent}>
+							<Text style={[styles.mostUsedName, { color: theme.text }]}>
+								{trattamentoPiuUsato.hasPariMerito
+									? `Pari merito: ${trattamentoPiuUsato.nomi.join(', ')}`
+									: trattamentoPiuUsato.nomi[0]}
+							</Text>
+							<Text style={[styles.mostUsedCount, { color: theme.textSecondary }]}>
+								{trattamentoPiuUsato.hasPariMerito
+									? `${trattamentoPiuUsato.conteggio} volte ciascuno`
+									: `${trattamentoPiuUsato.conteggio} volte`}
+							</Text>
+						</View>
+					)}
+				</View>
+
 				{!isEditing && (
 					<TouchableOpacity
 						style={[styles.deleteButton, { backgroundColor: theme.error }]}
@@ -370,6 +446,28 @@ export default function DettaglioClienteScreen() {
 		fontSize: 18,
 		fontWeight: 'bold',
 		marginBottom: 12,
+	},
+	mostUsedTitle: {
+		marginBottom: 0,
+		marginLeft: 8,
+	},
+	mostUsedHeader: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		marginBottom: 12,
+	},
+	mostUsedContent: {
+		gap: 4,
+	},
+	mostUsedName: {
+		fontSize: 16,
+		fontWeight: '600',
+	},
+	mostUsedCount: {
+		fontSize: 14,
+	},
+	mostUsedEmpty: {
+		paddingVertical: 4,
 	},
 	autocuraInput: {
 		fontSize: 16,

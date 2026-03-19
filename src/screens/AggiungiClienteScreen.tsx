@@ -23,6 +23,7 @@ export default function AggiungiClienteScreen() {
 	const navigation = useNavigation();
 	const { addCliente, impostazioni } = useApp();
 	const theme = impostazioni.temaSuro ? darkTheme : lightTheme;
+	const minimumDataNascita = new Date(1900, 0, 1);
 
 	const [nome, setNome] = useState('');
 	const [email, setEmail] = useState('');
@@ -36,11 +37,6 @@ export default function AggiungiClienteScreen() {
 			Alert.alert('Errore', 'Il nome è obbligatorio');
 			return;
 		}
-		if (!telefono.trim()) {
-			Alert.alert('Errore', 'Il telefono è obbligatorio');
-			return;
-		}
-
 
 		try {
 			await addCliente({
@@ -119,7 +115,7 @@ export default function AggiungiClienteScreen() {
 						</View>
 
 						<View style={[styles.inputContainer, { backgroundColor: theme.card }]}>
-							<Text style={[styles.label, { color: theme.textSecondary }]}>Telefono *</Text>
+							<Text style={[styles.label, { color: theme.textSecondary }]}>Telefono</Text>
 							<TextInput
 								style={[styles.input, { color: theme.text }]}
 								placeholder="+39 123 456 7890"
@@ -135,8 +131,8 @@ export default function AggiungiClienteScreen() {
 							value={dataNascita}
 							onChange={setDataNascita}
 							theme={theme}
+							minimumDate={minimumDataNascita}
 							maximumDate={new Date()}
-							required
 						/>
 
 						<View style={[styles.inputContainer, { backgroundColor: theme.card }]}>
@@ -150,7 +146,7 @@ export default function AggiungiClienteScreen() {
 							/>
 						</View>
 
-						<Text style={[styles.note, { color: theme.textSecondary }]}>* Campi obbligatori</Text>
+						<Text style={[styles.note, { color: theme.textSecondary }]}>* Il nome è obbligatorio</Text>
 					</ScrollView>
 				</View>
 			</KeyboardAvoidingView>

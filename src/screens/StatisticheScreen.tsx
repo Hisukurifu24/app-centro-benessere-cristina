@@ -20,6 +20,7 @@ export default function StatisticheScreen() {
 
 	const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
 	const [tipoSelezionatoId, setTipoSelezionatoId] = useState<string | null>(null);
+	const [tipoPiuUsatoSelezionatoId, setTipoPiuUsatoSelezionatoId] = useState<string | null>(null);
 
 	const toggleSection = (section: string) => {
 		setExpandedSections(prev => ({
@@ -75,6 +76,66 @@ export default function StatisticheScreen() {
 		() => tipiTrattamento.find(tipo => tipo.id === tipoSelezionatoId) || null,
 		[tipiTrattamento, tipoSelezionatoId]
 	);
+
+	const tipoPiuUsatoSelezionato = useMemo(
+		() => tipiTrattamento.find(tipo => tipo.id === tipoPiuUsatoSelezionatoId) || null,
+		[tipiTrattamento, tipoPiuUsatoSelezionatoId]
+	);
+
+	const clientiPerTrattamentoPiuUsato = useMemo(() => {
+		if (!tipoPiuUsatoSelezionatoId) {
+			return [];
+		}
+
+		const tipoTarget = tipiTrattamento.find(tipo => tipo.id === tipoPiuUsatoSelezionatoId);
+		if (!tipoTarget) {
+			return [];
+		}
+
+		const nomeTarget = tipoTarget.nome.trim().toLowerCase();
+
+		return clienti
+			.map(cliente => {
+				const conteggiPerTipo = trattamenti
+					.filter(trattamento => trattamento.clienteId === cliente.id)
+					.reduce((acc, trattamento) => {
+						const nome = trattamento.nome.trim().toLowerCase();
+						if (!nome) {
+							return acc;
+						}
+
+						acc[nome] = (acc[nome] || 0) + 1;
+						return acc;
+					}, {} as Record<string, number>);
+
+				const counts = Object.values(conteggiPerTipo);
+				if (counts.length === 0) {
+					return null;
+				}
+
+				const maxCount = Math.max(...counts);
+				const countTarget = conteggiPerTipo[nomeTarget] || 0;
+				if (countTarget === 0 || countTarget !== maxCount) {
+					return null;
+				}
+
+				const tipiAlTop = Object.values(conteggiPerTipo).filter(count => count === maxCount).length;
+
+				return {
+					cliente,
+					count: countTarget,
+					hasPariMerito: tipiAlTop > 1,
+				};
+			})
+			.filter((item): item is { cliente: typeof clienti[number]; count: number; hasPariMerito: boolean } => item !== null)
+			.sort((a, b) => {
+				if (b.count !== a.count) {
+					return b.count - a.count;
+				}
+
+				return a.cliente.nome.localeCompare(b.cliente.nome, 'it-IT');
+			});
+	}, [clienti, trattamenti, tipoPiuUsatoSelezionatoId, tipiTrattamento]);
 
 	const sendReminder = (cliente: any) => {
 		Alert.alert(
@@ -294,6 +355,90 @@ export default function StatisticheScreen() {
 					)}
 				</View>
 
+				{/* Clienti per Trattamento più Usato */}
+				<View style={[styles.sectionCard, { backgroundColor: theme.card }]}>
+					<TouchableOpacity
+						style={styles.sectionHeader}
+						onPress={() => toggleSection('piuUsatoPerTipo')}
+					>
+						<View style={styles.sectionTitleContainer}>
+							<Ionicons name="stats-chart" size={24} color={theme.primary} />
+							<Text style={[styles.sectionTitle, { color: theme.text }]}>Clienti per Trattamento più Usato</Text>
+						</View>
+						<Ionicons
+							name={expandedSections['piuUsatoPerTipo'] ? 'chevron-up' : 'chevron-down'}
+							size={24}
+							color={theme.textSecondary}
+						/>
+					</TouchableOpacity>
+
+					{expandedSections['piuUsatoPerTipo'] && (
+						<View style={styles.sectionContent}>
+							<Text style={[styles.sectionDescription, { color: theme.textSecondary }]}>Seleziona un tipo di trattamento per vedere quali clienti lo hanno come trattamento più usato</Text>
+
+							{tipiTrattamento.length > 0 ? (
+								<>
+									<ScrollView
+										horizontal
+										showsHorizontalScrollIndicator={false}
+										contentContainerStyle={styles.tipoFilterContainer}
+									>
+										{tipiTrattamento.map(tipo => {
+											const isSelected = tipo.id === tipoPiuUsatoSelezionatoId;
+											return (
+												<TouchableOpacity
+													key={tipo.id}
+													style={[
+														styles.tipoFilterChip,
+														isSelected
+															? { backgroundColor: theme.primary, borderColor: theme.primary }
+															: { backgroundColor: theme.background, borderColor: theme.border },
+													]}
+													onPress={() =>
+														setTipoPiuUsatoSelezionatoId(prev => (prev === tipo.id ? null : tipo.id))
+													}
+												>
+													<Text
+														style={[
+															styles.tipoFilterChipText,
+															isSelected ? { color: '#FFF' } : { color: theme.text },
+														]}
+													>
+														{tipo.nome}
+													</Text>
+												</TouchableOpacity>
+											);
+										})}
+									</ScrollView>
+
+									{!tipoPiuUsatoSelezionato ? (
+										<Text style={[styles.emptyText, { color: theme.textSecondary }]}>Seleziona un tipo di trattamento</Text>
+									) : clientiPerTrattamentoPiuUsato.length > 0 ? (
+										<>
+											<Text style={[styles.typeResultTitle, { color: theme.text }]}>Più usato: {tipoPiuUsatoSelezionato.nome} ({clientiPerTrattamentoPiuUsato.length})</Text>
+											{clientiPerTrattamentoPiuUsato.map(item => (
+												<View key={item.cliente.id} style={[styles.clienteItem, { borderBottomColor: theme.border }]}>
+													<Text style={[styles.clienteName, { color: theme.text }]}>{item.cliente.nome}</Text>
+													<View style={styles.clienteMeta}>
+														<Text style={[styles.clienteUsageCount, { color: theme.textSecondary }]}>{item.count} volte</Text>
+														{item.hasPariMerito && (
+															<Text style={[styles.pariMeritoBadge, { color: theme.warning, backgroundColor: `${theme.warning}20` }]}>Pari merito</Text>
+														)}
+													</View>
+												</View>
+											))}
+										</>
+									) : (
+										<Text style={[styles.emptyText, { color: theme.textSecondary }]}>Nessun cliente con questo trattamento come più usato</Text>
+									)}
+								</>
+							) : (
+								<Text style={[styles.emptyText, { color: theme.textSecondary }]}>Nessun tipo di trattamento disponibile</Text>
+							)}
+						</View>
+					)}
+				</View>
+
 				{/* Trattamenti Più Richiesti */}
 				<View style={[styles.sectionCard, { backgroundColor: theme.card }]}>
 					<TouchableOpacity
@@ -440,6 +585,23 @@ const styles = StyleSheet.create({
 	clienteName: {
 		fontSize: 16,
 		flex: 1,
+	},
+	clienteMeta: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		marginLeft: 8,
+	},
+	clienteUsageCount: {
+		fontSize: 13,
+		fontWeight: '600',
+	},
+	pariMeritoBadge: {
+		fontSize: 11,
+		fontWeight: '600',
+		paddingHorizontal: 8,
+		paddingVertical: 3,
+		borderRadius: 10,
+		marginLeft: 8,
 	},
 	reminderButton: {
 		flexDirection: 'row',
