@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
 	View,
 	Text,
@@ -7,25 +7,43 @@ import {
 	Image,
 	TouchableOpacity,
 	Alert,
-	Dimensions,
+	TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { useApp } from '../context/AppContext';
 import { lightTheme, darkTheme } from '../theme/colors';
 import { formatDate } from '../utils/helpers';
-
-const { width } = Dimensions.get('window');
+import { showImagePickerOptions } from '../utils/imagePicker';
+import DatePicker from '../components/DatePicker';
+import { RootStackParamList } from '../types/navigation';
 
 export default function DettaglioTrattamentoScreen() {
-	const navigation = useNavigation();
-	const route = useRoute();
-	const { trattamentoId } = route.params as { trattamentoId: string };
-	const { trattamenti, deleteTrattamento, impostazioni } = useApp();
+	const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+	const route = useRoute<RouteProp<RootStackParamList, 'DettaglioTrattamento'>>();
+	const { trattamentoId } = route.params;
+	const { trattamenti, updateTrattamento, deleteTrattamento, impostazioni } = useApp();
 	const theme = impostazioni.temaSuro ? darkTheme : lightTheme;
+	const [isEditing, setIsEditing] = useState(false);
+	const [editedNome, setEditedNome] = useState('');
+	const [editedDescrizione, setEditedDescrizione] = useState('');
+	const [editedData, setEditedData] = useState(new Date());
+	const [editedFotoPrima, setEditedFotoPrima] = useState<string | undefined>();
+	const [editedFotoDopo, setEditedFotoDopo] = useState<string | undefined>();
 
 	const trattamento = trattamenti.find(t => t.id === trattamentoId);
+
+	useEffect(() => {
+		if (!trattamento || isEditing) return;
+
+		setEditedNome(trattamento.nome);
+		setEditedDescrizione(trattamento.descrizione || '');
+		setEditedData(new Date(trattamento.data));
+		setEditedFotoPrima(trattamento.fotoPrima);
+		setEditedFotoDopo(trattamento.fotoDopo);
+	}, [trattamento, isEditing]);
 
 	if (!trattamento) {
 		return (
@@ -34,6 +52,39 @@ export default function DettaglioTrattamentoScreen() {
 			</View>
 		);
 	}
+
+	const handleStartEditing = () => {
+		setEditedNome(trattamento.nome);
+		setEditedDescrizione(trattamento.descrizione || '');
+		setEditedData(new Date(trattamento.data));
+		setEditedFotoPrima(trattamento.fotoPrima);
+		setEditedFotoDopo(trattamento.fotoDopo);
+		setIsEditing(true);
+	};
+
+	const handleSave = async () => {
+		const nomePulito = editedNome.trim();
+
+		if (!nomePulito) {
+			Alert.alert('Errore', 'Il nome del trattamento è obbligatorio');
+			return;
+		}
+
+		try {
+			await updateTrattamento(trattamentoId, {
+				nome: nomePulito,
+				descrizione: editedDescrizione.trim(),
+				data: editedData.toISOString(),
+				fotoPrima: editedFotoPrima,
+				fotoDopo: editedFotoDopo,
+			});
+
+			setIsEditing(false);
+			Alert.alert('Successo', 'Trattamento aggiornato');
+		} catch (error) {
+			Alert.alert('Errore', 'Impossibile aggiornare il trattamento');
+		}
+	};
 
 	// Trova tutti i trattamenti dello stesso tipo per lo stesso cliente
 	const trattamentiStessoTipo = trattamenti
@@ -65,16 +116,38 @@ export default function DettaglioTrattamentoScreen() {
 		);
 	};
 
-	const renderFotoSection = (title: string, foto?: string) => {
+	const renderFotoSection = (
+		title: string,
+		foto: string | undefined,
+		editable: boolean = false,
+		onPick?: () => void,
+		onRemove?: () => void
+	) => {
 		return (
 			<View style={styles.fotoSection}>
 				<Text style={[styles.fotoLabel, { color: theme.textSecondary }]}>{title}</Text>
-				{foto ? (
-					<Image source={{ uri: foto }} style={styles.foto} resizeMode="contain" />
-				) : (
-					<View style={[styles.fotoPlaceholder, { backgroundColor: theme.border }]}>
-						<Ionicons name="image-outline" size={32} color={theme.textSecondary} />
-					</View>
+				<TouchableOpacity
+					onPress={() => {
+						if (editable && onPick) onPick();
+					}}
+					disabled={!editable}
+				>
+					{foto ? (
+						<Image source={{ uri: foto }} style={styles.foto} resizeMode="contain" />
+					) : (
+						<View style={[styles.fotoPlaceholder, { backgroundColor: theme.border }]}>
+							<Ionicons name="image-outline" size={32} color={theme.textSecondary} />
+							{editable && (
+								<Text style={[styles.fotoActionText, { color: theme.textSecondary }]}>Aggiungi foto</Text>
+							)}
+						</View>
+					)}
+				</TouchableOpacity>
+				{editable && foto && (
+					<TouchableOpacity style={styles.removePhotoButton} onPress={onRemove}>
+						<Ionicons name="trash-outline" size={14} color={theme.error} />
+						<Text style={[styles.removePhotoText, { color: theme.error }]}>Rimuovi foto</Text>
+					</TouchableOpacity>
 				)}
 			</View>
 		);
@@ -87,34 +160,76 @@ export default function DettaglioTrattamentoScreen() {
 					<Ionicons name="arrow-back" size={28} color={theme.text} />
 				</TouchableOpacity>
 				<Text style={[styles.title, { color: theme.text }]}>Dettagli Trattamento</Text>
-				<TouchableOpacity onPress={handleDelete}>
-					<Ionicons name="trash" size={24} color={theme.error} />
+				<TouchableOpacity onPress={isEditing ? handleSave : handleStartEditing}>
+					<Text style={[styles.editButton, { color: theme.primary }]}>
+						{isEditing ? 'Salva' : 'Modifica'}
+					</Text>
 				</TouchableOpacity>
 			</View>
 
 			<ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
+				{isEditing && (
+					<TouchableOpacity
+						style={[styles.cancelButton, { borderColor: theme.border }]}
+						onPress={() => setIsEditing(false)}
+					>
+						<Text style={[styles.cancelButtonText, { color: theme.textSecondary }]}>Annulla modifiche</Text>
+					</TouchableOpacity>
+				)}
+
 				<View style={[styles.infoCard, { backgroundColor: theme.card }]}>
 					<Text style={[styles.cardTitle, { color: theme.text }]}>Informazioni</Text>
 
 					<View style={styles.infoRow}>
 						<Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Nome:</Text>
-						<Text style={[styles.infoValue, { color: theme.text }]}>{trattamento.nome}</Text>
+						{isEditing ? (
+							<TextInput
+								style={[styles.infoInput, { color: theme.text, borderColor: theme.border }]}
+								value={editedNome}
+								onChangeText={setEditedNome}
+								placeholder="Nome trattamento"
+								placeholderTextColor={theme.textSecondary}
+							/>
+						) : (
+							<Text style={[styles.infoValue, { color: theme.text }]}>{trattamento.nome}</Text>
+						)}
 					</View>
 
-					{trattamento.descrizione && (
-						<View style={styles.infoRow}>
-							<Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Descrizione:</Text>
+					<View style={styles.infoRow}>
+						<Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Descrizione:</Text>
+						{isEditing ? (
+							<TextInput
+								style={[styles.infoTextArea, { color: theme.text, borderColor: theme.border }]}
+								value={editedDescrizione}
+								onChangeText={setEditedDescrizione}
+								placeholder="Descrizione del trattamento"
+								placeholderTextColor={theme.textSecondary}
+								multiline
+								numberOfLines={4}
+								textAlignVertical="top"
+							/>
+						) : (
 							<Text style={[styles.infoValue, { color: theme.text }]}>
-								{trattamento.descrizione}
+								{trattamento.descrizione || 'N/A'}
 							</Text>
-						</View>
-					)}
+						)}
+					</View>
 
 					<View style={styles.infoRow}>
 						<Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Data:</Text>
-						<Text style={[styles.infoValue, { color: theme.text }]}>
-							{formatDate(trattamento.data)}
-						</Text>
+						{isEditing ? (
+							<DatePicker
+								label=""
+								value={editedData}
+								onChange={setEditedData}
+								theme={theme}
+								maximumDate={new Date()}
+							/>
+						) : (
+							<Text style={[styles.infoValue, { color: theme.text }]}>
+								{formatDate(trattamento.data)}
+							</Text>
+						)}
 					</View>
 
 					<View style={styles.infoRow}>
@@ -129,12 +244,34 @@ export default function DettaglioTrattamentoScreen() {
 					<Text style={[styles.cardTitle, { color: theme.text }]}>Foto</Text>
 
 					<View style={styles.fotoGrid}>
-						{renderFotoSection('Prima', trattamento.fotoPrima)}
-						{renderFotoSection('Dopo', trattamento.fotoDopo)}
+						{renderFotoSection(
+							'Prima',
+							isEditing ? editedFotoPrima : trattamento.fotoPrima,
+							isEditing,
+							() => showImagePickerOptions((uri) => setEditedFotoPrima(uri), { preserveOriginalAspectRatio: true }),
+							() => setEditedFotoPrima(undefined)
+						)}
+						{renderFotoSection(
+							'Dopo',
+							isEditing ? editedFotoDopo : trattamento.fotoDopo,
+							isEditing,
+							() => showImagePickerOptions((uri) => setEditedFotoDopo(uri), { preserveOriginalAspectRatio: true }),
+							() => setEditedFotoDopo(undefined)
+						)}
 						{renderFotoSection('Primo Trattamento', fotoPrimoTrattamento)}
 						{renderFotoSection('Ultimo Trattamento', fotoUltimoTrattamento)}
 					</View>
 				</View>
+
+				{!isEditing && (
+					<TouchableOpacity
+						style={[styles.deleteButton, { backgroundColor: theme.error }]}
+						onPress={handleDelete}
+					>
+						<Ionicons name="trash" size={18} color="#FFF" />
+						<Text style={styles.deleteButtonText}>Elimina trattamento</Text>
+					</TouchableOpacity>
+				)}
 			</ScrollView>
 		</SafeAreaView>
 	);
@@ -154,11 +291,27 @@ export default function DettaglioTrattamentoScreen() {
 		fontSize: 20,
 		fontWeight: 'bold',
 	},
+	editButton: {
+		fontSize: 17,
+		fontWeight: '600',
+	},
 	content: {
 		flex: 1,
 	},
 	contentContainer: {
 		padding: 16,
+	},
+	cancelButton: {
+		alignSelf: 'flex-end',
+		borderWidth: 1,
+		borderRadius: 10,
+		paddingVertical: 8,
+		paddingHorizontal: 12,
+		marginBottom: 10,
+	},
+	cancelButtonText: {
+		fontSize: 13,
+		fontWeight: '600',
 	},
 	infoCard: {
 		borderRadius: 12,
@@ -186,6 +339,21 @@ export default function DettaglioTrattamentoScreen() {
 	infoValue: {
 		fontSize: 16,
 	},
+	infoInput: {
+		fontSize: 16,
+		borderWidth: 1,
+		borderRadius: 8,
+		paddingHorizontal: 12,
+		paddingVertical: 10,
+	},
+	infoTextArea: {
+		fontSize: 16,
+		borderWidth: 1,
+		borderRadius: 8,
+		paddingHorizontal: 12,
+		paddingVertical: 10,
+		minHeight: 100,
+	},
 	fotoGrid: {
 		flexDirection: 'row',
 		flexWrap: 'wrap',
@@ -211,10 +379,38 @@ export default function DettaglioTrattamentoScreen() {
 		borderRadius: 8,
 		justifyContent: 'center',
 		alignItems: 'center',
+		gap: 6,
+	},
+	fotoActionText: {
+		fontSize: 12,
+		fontWeight: '500',
+	},
+	removePhotoButton: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		marginTop: 8,
+		gap: 6,
+	},
+	removePhotoText: {
+		fontSize: 12,
+		fontWeight: '600',
 	},
 	errorText: {
 		fontSize: 18,
 		textAlign: 'center',
 		marginTop: 100,
+	},
+	deleteButton: {
+		flexDirection: 'row',
+		justifyContent: 'center',
+		alignItems: 'center',
+		paddingVertical: 14,
+		borderRadius: 12,
+		gap: 8,
+	},
+	deleteButtonText: {
+		color: '#FFF',
+		fontSize: 16,
+		fontWeight: '700',
 	},
 });
