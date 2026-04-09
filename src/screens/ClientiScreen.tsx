@@ -314,12 +314,16 @@ export default function ClientiScreen() {
 		marginBottom: 12,
 		borderRadius: 12,
 		flexShrink: 0,
+		height: 68,
+		maxHeight: 68,
 	},
 	sortContentContainer: {
 		flexDirection: 'row',
 		alignItems: 'center',
+		justifyContent: 'center',
 		paddingHorizontal: 16,
-		paddingVertical: 16,
+		paddingVertical: 0,
+		height: '100%',
 		gap: 8,
 	},
 	sortLabel: {
