@@ -229,21 +229,46 @@ export default function DettaglioClienteScreen() {
 					<View style={styles.infoRow}>
 						<Ionicons name="calendar" size={20} color={theme.primary} />
 						{isEditing ? (
-							<View style={{ flex: 1, marginLeft: 12 }}>
-								<DatePicker
-									label=""
-									value={editedCliente?.dataNascita ? new Date(editedCliente.dataNascita) : new Date()}
-									onChange={(date) =>
-										setEditedCliente(prev => prev ? { ...prev, dataNascita: date.toISOString() } : prev)
-									}
-									theme={theme}
-									minimumDate={minimumDataNascita}
-									maximumDate={new Date()}
-								/>
+							<View style={styles.dateEditorContainer}>
+								{editedCliente?.dataNascita ? (
+									<>
+										<DatePicker
+											label=""
+											value={new Date(editedCliente.dataNascita)}
+											onChange={(date) =>
+												setEditedCliente(prev => prev ? { ...prev, dataNascita: date.toISOString() } : prev)
+											}
+											theme={theme}
+											minimumDate={minimumDataNascita}
+											maximumDate={new Date()}
+										/>
+										<TouchableOpacity
+											style={[styles.dateActionButton, { borderColor: theme.error }]}
+											onPress={() =>
+												setEditedCliente(prev => prev ? { ...prev, dataNascita: undefined } : prev)
+											}
+										>
+											<Ionicons name="trash-outline" size={16} color={theme.error} />
+											<Text style={[styles.dateActionText, { color: theme.error }]}>Rimuovi data</Text>
+										</TouchableOpacity>
+									</>
+								) : (
+									<TouchableOpacity
+										style={[styles.dateActionButton, { borderColor: theme.primary }]}
+										onPress={() =>
+											setEditedCliente(prev => prev ? { ...prev, dataNascita: new Date().toISOString() } : prev)
+										}
+									>
+										<Ionicons name="calendar-outline" size={16} color={theme.primary} />
+										<Text style={[styles.dateActionText, { color: theme.primary }]}>Aggiungi data di nascita</Text>
+									</TouchableOpacity>
+								)}
 							</View>
 						) : (
 							<Text style={[styles.infoText, { color: theme.text }]}>
-								{formatDate(cliente.dataNascita)} ({calculateAge(cliente.dataNascita)} anni)
+								{cliente.dataNascita
+									? `${formatDate(cliente.dataNascita)} (${calculateAge(cliente.dataNascita)} anni)`
+									: 'N/A'}
 							</Text>
 						)}
 					</View>
@@ -435,6 +460,23 @@ export default function DettaglioClienteScreen() {
 		flex: 1,
 		padding: 8,
 		borderRadius: 6,
+	},
+	dateEditorContainer: {
+		flex: 1,
+		marginLeft: 12,
+	},
+	dateActionButton: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		justifyContent: 'center',
+		borderWidth: 1,
+		borderRadius: 8,
+		paddingVertical: 10,
+		gap: 8,
+	},
+	dateActionText: {
+		fontSize: 14,
+		fontWeight: '600',
 	},
 	autocuraCard: {
 		marginHorizontal: 16,

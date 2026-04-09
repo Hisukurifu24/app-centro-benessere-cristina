@@ -32,7 +32,7 @@ export const scheduleCompleanniNotifications = async (clienti: Cliente[]) => {
 
 		// Ordina i clienti per data di compleanno più vicina
 		const clientiConData = clienti
-			.filter(cliente => cliente.dataNascita)
+			.filter((cliente): cliente is Cliente & { dataNascita: string } => Boolean(cliente.dataNascita))
 			.map(cliente => {
 				const birthDate = new Date(cliente.dataNascita);
 				const thisYearBirthday = new Date(

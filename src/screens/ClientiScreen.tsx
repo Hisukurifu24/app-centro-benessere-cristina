@@ -121,7 +121,7 @@ export default function ClientiScreen() {
 					<View style={styles.clienteDettagli}>
 						<Ionicons name="calendar" size={16} color={theme.textSecondary} />
 						<Text style={[styles.clienteTesto, { color: theme.textSecondary }]}>
-							{formatDate(item.dataNascita)}
+							{item.dataNascita ? formatDate(item.dataNascita) : 'N/A'}
 						</Text>
 					</View>
 				</View>

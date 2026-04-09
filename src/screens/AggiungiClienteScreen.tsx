@@ -28,7 +28,7 @@ export default function AggiungiClienteScreen() {
 	const [nome, setNome] = useState('');
 	const [email, setEmail] = useState('');
 	const [telefono, setTelefono] = useState('');
-	const [dataNascita, setDataNascita] = useState(new Date());
+	const [dataNascita, setDataNascita] = useState<Date | undefined>(undefined);
 	const [indirizzo, setIndirizzo] = useState('');
 	const [foto, setFoto] = useState<string | undefined>();
 
@@ -43,7 +43,7 @@ export default function AggiungiClienteScreen() {
 				nome: nome.trim(),
 				email: email.trim(),
 				telefono: telefono.trim(),
-				dataNascita: dataNascita.toISOString(),
+				...(dataNascita ? { dataNascita: dataNascita.toISOString() } : {}),
 				indirizzo: indirizzo.trim(),
 				foto,
 				autocura: '',
@@ -126,14 +126,33 @@ export default function AggiungiClienteScreen() {
 							/>
 						</View>
 
-						<DatePicker
-							label="Data di nascita"
-							value={dataNascita}
-							onChange={setDataNascita}
-							theme={theme}
-							minimumDate={minimumDataNascita}
-							maximumDate={new Date()}
-						/>
+						{dataNascita ? (
+							<View style={styles.datePickerSection}>
+								<DatePicker
+									label="Data di nascita"
+									value={dataNascita}
+									onChange={setDataNascita}
+									theme={theme}
+									minimumDate={minimumDataNascita}
+									maximumDate={new Date()}
+								/>
+								<TouchableOpacity
+									style={[styles.dateActionButton, { borderColor: theme.error }]}
+									onPress={() => setDataNascita(undefined)}
+								>
+									<Ionicons name="trash-outline" size={16} color={theme.error} />
+									<Text style={[styles.dateActionText, { color: theme.error }]}>Rimuovi data</Text>
+								</TouchableOpacity>
+							</View>
+						) : (
+							<TouchableOpacity
+								style={[styles.addDateButton, { backgroundColor: theme.card, borderColor: theme.border }]}
+								onPress={() => setDataNascita(new Date())}
+							>
+								<Ionicons name="calendar-outline" size={20} color={theme.primary} />
+								<Text style={[styles.addDateText, { color: theme.text }]}>Aggiungi data di nascita</Text>
+							</TouchableOpacity>
+						)}
 
 						<View style={[styles.inputContainer, { backgroundColor: theme.card }]}>
 							<Text style={[styles.label, { color: theme.textSecondary }]}>Indirizzo</Text>
@@ -204,6 +223,37 @@ const styles = StyleSheet.create({
 		borderRadius: 12,
 		padding: 16,
 		marginBottom: 16,
+	},
+	datePickerSection: {
+		marginBottom: 16,
+	},
+	addDateButton: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		justifyContent: 'center',
+		borderWidth: 1,
+		borderRadius: 12,
+		paddingVertical: 14,
+		gap: 8,
+		marginBottom: 16,
+	},
+	addDateText: {
+		fontSize: 16,
+		fontWeight: '600',
+	},
+	dateActionButton: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		justifyContent: 'center',
+		borderWidth: 1,
+		borderRadius: 8,
+		paddingVertical: 10,
+		gap: 8,
+		marginTop: -4,
+	},
+	dateActionText: {
+		fontSize: 14,
+		fontWeight: '600',
 	},
 	label: {
 		fontSize: 14,

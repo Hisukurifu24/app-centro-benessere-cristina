@@ -3,7 +3,7 @@ export interface Cliente {
 	nome: string;
 	email: string;
 	telefono: string;
-	dataNascita: string;
+	dataNascita?: string;
 	indirizzo: string;
 	foto?: string;
 	autocura: string;
