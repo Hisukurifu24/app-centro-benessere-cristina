@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
 	View,
 	Text,
@@ -48,6 +48,24 @@ export default function AggiungiTrattamentoScreen() {
 	const [editingTipoId, setEditingTipoId] = useState<string | null>(null);
 	const [nuovoTipoNome, setNuovoTipoNome] = useState('');
 	const [nuovoTipoDescrizione, setNuovoTipoDescrizione] = useState('');
+	const [searchTipoQuery, setSearchTipoQuery] = useState('');
+
+	const filteredAndSortedTipiTrattamento = useMemo(() => {
+		const query = searchTipoQuery.trim().toLowerCase();
+
+		return [...tipiTrattamento]
+			.filter(tipo => {
+				if (!query) {
+					return true;
+				}
+
+				const nomeTipo = tipo.nome.toLowerCase();
+				const descrizioneTipo = tipo.descrizioneDefault.toLowerCase();
+
+				return nomeTipo.includes(query) || descrizioneTipo.includes(query);
+			})
+			.sort((a, b) => a.nome.localeCompare(b.nome, 'it'));
+	}, [tipiTrattamento, searchTipoQuery]);
 
 	const handleSave = async () => {
 		if (!nome.trim()) {
@@ -84,6 +102,16 @@ export default function AggiungiTrattamentoScreen() {
 	const closeTipoFormModal = () => {
 		setShowAddTipoModal(false);
 		resetTipoForm();
+	};
+
+	const closeTipiModal = () => {
+		setShowTipiModal(false);
+		setSearchTipoQuery('');
+	};
+
+	const openTipiModal = () => {
+		setSearchTipoQuery('');
+		setShowTipiModal(true);
 	};
 
 	const handleSaveTipoTrattamento = async () => {
@@ -126,13 +154,13 @@ export default function AggiungiTrattamentoScreen() {
 	};
 
 	const openAddTipoModal = () => {
-		setShowTipiModal(false);
+		closeTipiModal();
 		resetTipoForm();
 		setShowAddTipoModal(true);
 	};
 
 	const handleEditTipoTrattamento = (tipo: TipoTrattamento) => {
-		setShowTipiModal(false);
+		closeTipiModal();
 		setEditingTipoId(tipo.id);
 		setNuovoTipoNome(tipo.nome);
 		setNuovoTipoDescrizione(tipo.descrizioneDefault || '');
@@ -164,7 +192,7 @@ export default function AggiungiTrattamentoScreen() {
 	const selectTipoTrattamento = (tipo: TipoTrattamento) => {
 		setNome(tipo.nome);
 		setDescrizione(tipo.descrizioneDefault);
-		setShowTipiModal(false);
+		closeTipiModal();
 	};
 
 	return (
@@ -187,7 +215,7 @@ export default function AggiungiTrattamentoScreen() {
 
 				<TouchableOpacity
 					style={[styles.selectTipoButton, { backgroundColor: nome ? theme.success : theme.primary }]}
-					onPress={() => setShowTipiModal(true)}
+					onPress={openTipiModal}
 				>
 					<Ionicons name={nome ? "checkmark-circle" : "list"} size={20} color="#FFF" />
 					<Text style={styles.selectTipoText}>
@@ -266,19 +294,35 @@ export default function AggiungiTrattamentoScreen() {
 				visible={showTipiModal}
 				transparent
 				animationType="slide"
-				onRequestClose={() => setShowTipiModal(false)}
+				onRequestClose={closeTipiModal}
 			>
 				<View style={styles.modalOverlay}>
 					<View style={[styles.modalContent, { backgroundColor: theme.card }]}>
 						<View style={styles.modalHeader}>
 							<Text style={[styles.modalTitle, { color: theme.text }]}>Tipi di Trattamento</Text>
-							<TouchableOpacity onPress={() => setShowTipiModal(false)}>
+							<TouchableOpacity onPress={closeTipiModal}>
 								<Ionicons name="close" size={28} color={theme.text} />
 							</TouchableOpacity>
 						</View>
 
+						<View style={[styles.modalSearchContainer, { borderColor: theme.border, backgroundColor: theme.background }]}>
+							<Ionicons name="search" size={18} color={theme.textSecondary} style={styles.modalSearchIcon} />
+							<TextInput
+								style={[styles.modalSearchInput, { color: theme.text }]}
+								placeholder="Cerca tipo trattamento..."
+								placeholderTextColor={theme.textSecondary}
+								value={searchTipoQuery}
+								onChangeText={setSearchTipoQuery}
+							/>
+							{searchTipoQuery.length > 0 && (
+								<TouchableOpacity onPress={() => setSearchTipoQuery('')}>
+									<Ionicons name="close-circle" size={18} color={theme.textSecondary} />
+								</TouchableOpacity>
+							)}
+						</View>
+
 						<FlatList
-							data={tipiTrattamento}
+							data={filteredAndSortedTipiTrattamento}
 							renderItem={({ item }) => (
 								<View style={[styles.tipoRow, { borderBottomColor: theme.border }]}>
 									<TouchableOpacity
@@ -312,7 +356,7 @@ export default function AggiungiTrattamentoScreen() {
 							keyExtractor={item => item.id}
 							ListEmptyComponent={
 								<Text style={[styles.emptyText, { color: theme.textSecondary }]}>
-									Nessun tipo di trattamento disponibile
+									{searchTipoQuery.trim() ? 'Nessun tipo trovato' : 'Nessun tipo di trattamento disponibile'}
 								</Text>
 							}
 						/>
@@ -491,6 +535,23 @@ const styles = StyleSheet.create({
 	modalTitle: {
 		fontSize: 20,
 		fontWeight: 'bold',
+	},
+	modalSearchContainer: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		borderWidth: 1,
+		borderRadius: 10,
+		marginHorizontal: 16,
+		marginBottom: 8,
+		paddingHorizontal: 12,
+		paddingVertical: 10,
+	},
+	modalSearchIcon: {
+		marginRight: 8,
+	},
+	modalSearchInput: {
+		flex: 1,
+		fontSize: 15,
 	},
 	tipoRow: {
 		flexDirection: 'row',
