@@ -6,6 +6,9 @@ import {
 	ScrollView,
 	TouchableOpacity,
 	Alert,
+	TextInput,
+	FlatList,
+	Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,6 +24,10 @@ export default function StatisticheScreen() {
 	const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
 	const [tipoSelezionatoId, setTipoSelezionatoId] = useState<string | null>(null);
 	const [tipoPiuUsatoSelezionatoId, setTipoPiuUsatoSelezionatoId] = useState<string | null>(null);
+	const [isTipoDropdownVisible, setIsTipoDropdownVisible] = useState(false);
+	const [tipoSearchQuery, setTipoSearchQuery] = useState('');
+	const [giorniInattivitaInput, setGiorniInattivitaInput] = useState('30');
+	const [giorniInattivitaError, setGiorniInattivitaError] = useState<string | null>(null);
 
 	const toggleSection = (section: string) => {
 		setExpandedSections(prev => ({
@@ -30,6 +37,69 @@ export default function StatisticheScreen() {
 	};
 
 	const clientiInattivi = getClientiInattivi(clienti, trattamenti);
+
+	const giorniInattivita = useMemo(() => {
+		const parsed = parseInt(giorniInattivitaInput, 10);
+		if (Number.isNaN(parsed)) {
+			return 30;
+		}
+
+		return Math.min(90, Math.max(1, parsed));
+	}, [giorniInattivitaInput]);
+
+	const filteredTipiTrattamento = useMemo(() => {
+		const query = tipoSearchQuery.trim().toLowerCase();
+		const sorted = [...tipiTrattamento].sort((a, b) => a.nome.localeCompare(b.nome, 'it-IT'));
+
+		if (!query) {
+			return sorted;
+		}
+
+		return sorted.filter(tipo => tipo.nome.toLowerCase().includes(query));
+	}, [tipiTrattamento, tipoSearchQuery]);
+
+	const handleGiorniInattivitaChange = (value: string) => {
+		const numericOnly = value.replace(/[^0-9]/g, '');
+		setGiorniInattivitaInput(numericOnly);
+
+		if (!numericOnly) {
+			setGiorniInattivitaError('Inserisci un valore da 1 a 90');
+			return;
+		}
+
+		const parsed = parseInt(numericOnly, 10);
+		if (Number.isNaN(parsed) || parsed < 1 || parsed > 90) {
+			setGiorniInattivitaError('Valore valido: da 1 a 90');
+			return;
+		}
+
+		setGiorniInattivitaError(null);
+	};
+
+	const normalizeGiorniInattivita = () => {
+		const parsed = parseInt(giorniInattivitaInput, 10);
+		if (Number.isNaN(parsed)) {
+			setGiorniInattivitaInput('30');
+			setGiorniInattivitaError(null);
+			return;
+		}
+
+		const normalized = Math.min(90, Math.max(1, parsed));
+		setGiorniInattivitaInput(String(normalized));
+		setGiorniInattivitaError(null);
+	};
+
+	const handleSelectTipo = (tipoId: string) => {
+		setTipoSelezionatoId(tipoId);
+		setTipoSearchQuery('');
+		setIsTipoDropdownVisible(false);
+	};
+
+	const clearTipoSelection = () => {
+		setTipoSelezionatoId(null);
+		setTipoSearchQuery('');
+	};
+
 	const clientiInattiviPerTipo = useMemo(() => {
 		if (!tipoSelezionatoId) {
 			return [];
@@ -41,7 +111,7 @@ export default function StatisticheScreen() {
 		}
 
 		const now = Date.now();
-		const THIRTY_DAYS_IN_MS = 30 * 24 * 60 * 60 * 1000;
+		const inactivityWindowMs = giorniInattivita * 24 * 60 * 60 * 1000;
 		const nomeSelezionato = tipoSelezionato.nome.trim().toLowerCase();
 		const clientiConAlmenoUnTrattamento = new Set<string>();
 
@@ -60,7 +130,7 @@ export default function StatisticheScreen() {
 						return false;
 					}
 
-					return now - dataTrattamentoMs <= THIRTY_DAYS_IN_MS;
+					return now - dataTrattamentoMs <= inactivityWindowMs;
 				})
 				.map(trattamento => trattamento.clienteId)
 		);
@@ -70,7 +140,7 @@ export default function StatisticheScreen() {
 				clientiConAlmenoUnTrattamento.has(cliente.id) &&
 				!clienteIdsAttivi.has(cliente.id)
 		);
-	}, [clienti, trattamenti, tipoSelezionatoId, tipiTrattamento]);
+	}, [clienti, trattamenti, tipoSelezionatoId, tipiTrattamento, giorniInattivita]);
 
 	const tipoSelezionato = useMemo(
 		() => tipiTrattamento.find(tipo => tipo.id === tipoSelezionatoId) || null,
@@ -287,43 +357,55 @@ export default function StatisticheScreen() {
 					{expandedSections['inattiviPerTipo'] && (
 						<View style={styles.sectionContent}>
 							<Text style={[styles.sectionDescription, { color: theme.textSecondary }]}>
-								Seleziona un tipo di trattamento per vedere i clienti che lo hanno fatto almeno una volta ma non negli ultimi 30 giorni
+								Seleziona un tipo di trattamento per vedere i clienti che lo hanno fatto almeno una volta ma non negli ultimi {giorniInattivita} giorni
 							</Text>
 
 							{tipiTrattamento.length > 0 ? (
 								<>
-									<ScrollView
-										horizontal
-										showsHorizontalScrollIndicator={false}
-										contentContainerStyle={styles.tipoFilterContainer}
-									>
-										{tipiTrattamento.map(tipo => {
-											const isSelected = tipo.id === tipoSelezionatoId;
-											return (
-												<TouchableOpacity
-													key={tipo.id}
-													style={[
-														styles.tipoFilterChip,
-														isSelected
-															? { backgroundColor: theme.primary, borderColor: theme.primary }
-															: { backgroundColor: theme.background, borderColor: theme.border },
-													]}
-													onPress={() =>
-														setTipoSelezionatoId(prev => (prev === tipo.id ? null : tipo.id))
-													}
+									<View style={styles.filterControlsRow}>
+										<View style={styles.giorniInputContainer}>
+											<Text style={[styles.filterLabel, { color: theme.textSecondary }]}>Giorni inattivita</Text>
+											<TextInput
+												value={giorniInattivitaInput}
+												onChangeText={handleGiorniInattivitaChange}
+												onBlur={normalizeGiorniInattivita}
+												keyboardType="number-pad"
+												maxLength={2}
+												placeholder="30"
+												placeholderTextColor={theme.textSecondary}
+												style={[
+													styles.giorniInput,
+													{ color: theme.text, borderColor: giorniInattivitaError ? theme.error : theme.border, backgroundColor: theme.background },
+												]}
+											/>
+										</View>
+
+										<View style={styles.tipoDropdownContainer}>
+											<Text style={[styles.filterLabel, { color: theme.textSecondary }]}>Tipo trattamento</Text>
+											<TouchableOpacity
+												style={[styles.tipoDropdownButton, { borderColor: theme.border, backgroundColor: theme.background }]}
+												onPress={() => setIsTipoDropdownVisible(true)}
+											>
+												<Text
+													numberOfLines={1}
+													style={[styles.tipoDropdownButtonText, { color: tipoSelezionato ? theme.text : theme.textSecondary }]}
 												>
-													<Text
-														style={[
-															styles.tipoFilterChipText,
-															isSelected ? { color: '#FFF' } : { color: theme.text },
-														]}
-													>
-														{tipo.nome}
-													</Text>
-												</TouchableOpacity>
-											);
-										})}
-									</ScrollView>
+													{tipoSelezionato ? tipoSelezionato.nome : 'Seleziona tipo'}
+												</Text>
+												<Ionicons name="chevron-down" size={18} color={theme.textSecondary} />
+											</TouchableOpacity>
+										</View>
+									</View>
+
+									{giorniInattivitaError && (
+										<Text style={[styles.validationText, { color: theme.error }]}>{giorniInattivitaError}</Text>
+									)}
+
+									{tipoSelezionato && (
+										<TouchableOpacity style={styles.clearTipoButton} onPress={clearTipoSelection}>
+											<Text style={[styles.clearTipoButtonText, { color: theme.primary }]}>Rimuovi selezione</Text>
+										</TouchableOpacity>
+									)}
 
 									{!tipoSelezionato ? (
 										<Text style={[styles.emptyText, { color: theme.textSecondary }]}>
@@ -332,7 +414,7 @@ export default function StatisticheScreen() {
 									) : clientiInattiviPerTipo.length > 0 ? (
 										<>
 											<Text style={[styles.typeResultTitle, { color: theme.text }]}>
-												Inattivi per {tipoSelezionato.nome} ({clientiInattiviPerTipo.length})
+												Inattivi per {tipoSelezionato.nome} ({clientiInattiviPerTipo.length}) - ultimi {giorniInattivita} giorni
 											</Text>
 											{clientiInattiviPerTipo.map(cliente => (
 												<View key={cliente.id} style={[styles.clienteItem, { borderBottomColor: theme.border }]}>
@@ -354,6 +436,67 @@ export default function StatisticheScreen() {
 						</View>
 					)}
 				</View>
+
+				<Modal
+					visible={isTipoDropdownVisible}
+					transparent
+					animationType="slide"
+					onRequestClose={() => {
+						setIsTipoDropdownVisible(false);
+						setTipoSearchQuery('');
+					}}
+				>
+					<View style={styles.modalOverlay}>
+						<View style={[styles.modalContent, { backgroundColor: theme.card }]}>
+							<View style={styles.modalHeader}>
+								<Text style={[styles.modalTitle, { color: theme.text }]}>Seleziona tipo trattamento</Text>
+								<TouchableOpacity
+									onPress={() => {
+										setIsTipoDropdownVisible(false);
+										setTipoSearchQuery('');
+									}}
+								>
+									<Ionicons name="close" size={24} color={theme.text} />
+								</TouchableOpacity>
+							</View>
+
+							<View style={[styles.modalSearchContainer, { borderColor: theme.border, backgroundColor: theme.background }]}>
+								<Ionicons name="search" size={18} color={theme.textSecondary} style={styles.modalSearchIcon} />
+								<TextInput
+									style={[styles.modalSearchInput, { color: theme.text }]}
+									placeholder="Cerca tipo trattamento..."
+									placeholderTextColor={theme.textSecondary}
+									value={tipoSearchQuery}
+									onChangeText={setTipoSearchQuery}
+								/>
+								{tipoSearchQuery.length > 0 && (
+									<TouchableOpacity onPress={() => setTipoSearchQuery('')}>
+										<Ionicons name="close-circle" size={18} color={theme.textSecondary} />
+									</TouchableOpacity>
+								)}
+							</View>
+
+							<FlatList
+								data={filteredTipiTrattamento}
+								keyExtractor={item => item.id}
+								renderItem={({ item }) => (
+									<TouchableOpacity
+										style={[styles.tipoListItem, { borderBottomColor: theme.border }]}
+										onPress={() => handleSelectTipo(item.id)}
+									>
+										<Text style={[styles.tipoListItemText, { color: theme.text }]}>{item.nome}</Text>
+										{item.id === tipoSelezionatoId && (
+											<Ionicons name="checkmark-circle" size={20} color={theme.primary} />
+										)}
+									</TouchableOpacity>
+								)}
+								ListEmptyComponent={
+									<Text style={[styles.emptyText, { color: theme.textSecondary }]}>Nessun tipo trovato</Text>
+								}
+							/>
+						</View>
+					</View>
+				</Modal>
 
 				{/* Clienti per Trattamento più Usato */}
 				<View style={[styles.sectionCard, { backgroundColor: theme.card }]}>
@@ -555,6 +698,60 @@ const styles = StyleSheet.create({
 		fontSize: 14,
 		marginBottom: 12,
 	},
+	filterControlsRow: {
+		flexDirection: 'row',
+		alignItems: 'flex-end',
+		gap: 10,
+		marginBottom: 8,
+	},
+	giorniInputContainer: {
+		width: 120,
+	},
+	tipoDropdownContainer: {
+		flex: 1,
+	},
+	filterLabel: {
+		fontSize: 12,
+		fontWeight: '600',
+		marginBottom: 6,
+	},
+	giorniInput: {
+		height: 44,
+		borderWidth: 1,
+		borderRadius: 10,
+		paddingHorizontal: 12,
+		fontSize: 16,
+		fontWeight: '600',
+	},
+	tipoDropdownButton: {
+		height: 44,
+		borderWidth: 1,
+		borderRadius: 10,
+		paddingHorizontal: 12,
+		flexDirection: 'row',
+		alignItems: 'center',
+		justifyContent: 'space-between',
+	},
+	tipoDropdownButtonText: {
+		flex: 1,
+		marginRight: 8,
+		fontSize: 15,
+		fontWeight: '500',
+	},
+	validationText: {
+		fontSize: 12,
+		fontWeight: '500',
+		marginBottom: 8,
+	},
+	clearTipoButton: {
+		alignSelf: 'flex-start',
+		paddingVertical: 6,
+		marginBottom: 4,
+	},
+	clearTipoButtonText: {
+		fontSize: 13,
+		fontWeight: '600',
+	},
 	tipoFilterContainer: {
 		paddingBottom: 12,
 		paddingRight: 8,
@@ -651,5 +848,55 @@ const styles = StyleSheet.create({
 		textAlign: 'center',
 		padding: 16,
 		fontSize: 14,
+	},
+	modalOverlay: {
+		flex: 1,
+		backgroundColor: 'rgba(0, 0, 0, 0.45)',
+		justifyContent: 'flex-end',
+	},
+	modalContent: {
+		borderTopLeftRadius: 20,
+		borderTopRightRadius: 20,
+		maxHeight: '82%',
+		padding: 16,
+		paddingBottom: 24,
+	},
+	modalHeader: {
+		flexDirection: 'row',
+		justifyContent: 'space-between',
+		alignItems: 'center',
+		marginBottom: 12,
+	},
+	modalTitle: {
+		fontSize: 18,
+		fontWeight: '700',
+	},
+	modalSearchContainer: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		borderWidth: 1,
+		borderRadius: 10,
+		paddingHorizontal: 10,
+		marginBottom: 10,
+	},
+	modalSearchIcon: {
+		marginRight: 8,
+	},
+	modalSearchInput: {
+		flex: 1,
+		height: 42,
+		fontSize: 15,
+	},
+	tipoListItem: {
+		paddingVertical: 14,
+		paddingHorizontal: 4,
+		borderBottomWidth: 1,
+		flexDirection: 'row',
+		alignItems: 'center',
+		justifyContent: 'space-between',
+	},
+	tipoListItemText: {
+		fontSize: 16,
+		fontWeight: '500',
 	},
 });
