@@ -1,6 +1,6 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
-import { Cliente } from '../types';
+import { Cliente, Trattamento } from '../types';
 
 // Configurazione notifiche
 Notifications.setNotificationHandler({
@@ -100,18 +100,31 @@ export const checkCompleanni = (clienti: Cliente[]): Cliente[] => {
 	});
 };
 
-export const getClientiInattivi = (clienti: Cliente[], trattamenti: any[]): Cliente[] => {
-	const oneMonthAgo = new Date();
-	oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+export const GIORNI_INATTIVITA_DEFAULT = 30;
+export const GIORNI_INATTIVITA_MIN = 1;
+export const GIORNI_INATTIVITA_MAX = 90;
 
-	return clienti.filter(cliente => {
-		const trattamentiCliente = trattamenti.filter(t => t.clienteId === cliente.id);
+// Mezzanotte di N giorni fa (giorni di calendario): un trattamento da quel momento in poi
+// conta come attività recente. Con N=1, un trattamento di ieri a qualsiasi ora è recente.
+export const getInactivityCutoffMs = (giorni: number, now: Date = new Date()): number => {
+	const cutoff = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+	cutoff.setDate(cutoff.getDate() - giorni);
+	return cutoff.getTime();
+};
 
-		if (trattamentiCliente.length === 0) return true;
+// Clienti senza alcun trattamento negli ultimi `giorni` giorni di calendario
+// (inclusi quelli che non ne hanno mai fatto uno).
+export const getClientiInattivi = (
+	clienti: Cliente[],
+	trattamenti: Trattamento[],
+	giorni: number = GIORNI_INATTIVITA_DEFAULT
+): Cliente[] => {
+	const cutoffMs = getInactivityCutoffMs(giorni);
+	const clientiAttivi = new Set(
+		trattamenti
+			.filter(t => new Date(t.data).getTime() >= cutoffMs)
+			.map(t => t.clienteId)
+	);
 
-		const ultimoTrattamento = trattamentiCliente
-			.sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime())[0];
-
-		return new Date(ultimoTrattamento.data) < oneMonthAgo;
-	});
+	return clienti.filter(cliente => !clientiAttivi.has(cliente.id));
 };

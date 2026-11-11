@@ -6,9 +6,17 @@ export interface Cliente {
 	dataNascita?: string;
 	indirizzo: string;
 	foto?: string;
+	/** @deprecated testo libero legacy, sostituito da prodottiAutocura */
 	autocura: string;
+	prodottiAutocura?: ProdottoAutocura[];
 	note: string;
 	createdAt: string;
+}
+
+export interface ProdottoAutocura {
+	id: string;
+	nome: string;
+	data: string;
 }
 
 export interface Trattamento {

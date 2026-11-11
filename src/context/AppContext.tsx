@@ -53,10 +53,22 @@ const STORAGE_KEYS = {
 };
 
 const normalizeNome = (value: string) => value.trim().toLowerCase();
-const normalizeCliente = (cliente: Cliente): Cliente => ({
-	...cliente,
-	note: cliente.note ?? '',
-});
+const normalizeCliente = (cliente: Cliente): Cliente => {
+	let prodottiAutocura = cliente.prodottiAutocura;
+	if (!Array.isArray(prodottiAutocura)) {
+		// Migrazione: il vecchio testo libero diventa la prima voce della lista
+		const legacy = (cliente.autocura ?? '').trim();
+		prodottiAutocura = legacy
+			? [{ id: `${cliente.id}-autocura-legacy`, nome: legacy, data: cliente.createdAt }]
+			: [];
+	}
+	return {
+		...cliente,
+		note: cliente.note ?? '',
+		autocura: cliente.autocura ?? '',
+		prodottiAutocura,
+	};
+};
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
 	const [clienti, setClienti] = useState<Cliente[]>([]);
@@ -107,6 +119,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 		const nuovoCliente: Cliente = {
 			...cliente,
 			note: cliente.note ?? '',
+			prodottiAutocura: cliente.prodottiAutocura ?? [],
 			id: Date.now().toString(),
 			createdAt: new Date().toISOString(),
 		};

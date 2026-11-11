@@ -47,6 +47,7 @@ export default function AggiungiClienteScreen() {
 				indirizzo: indirizzo.trim(),
 				foto,
 				autocura: '',
+				prodottiAutocura: [],
 				note: '',
 			});
 

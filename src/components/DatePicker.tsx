@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Platform, Modal, StyleProp, ViewStyle } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -11,6 +11,7 @@ interface DatePickerProps {
 	required?: boolean;
 	maximumDate?: Date;
 	minimumDate?: Date;
+	containerStyle?: StyleProp<ViewStyle>;
 }
 
 export default function DatePicker({
@@ -20,7 +21,8 @@ export default function DatePicker({
 	theme,
 	required = false,
 	maximumDate,
-	minimumDate
+	minimumDate,
+	containerStyle,
 }: DatePickerProps) {
 	const [show, setShow] = useState(false);
 
@@ -58,7 +60,7 @@ export default function DatePicker({
 	};
 
 	return (
-		<View style={[styles.container, { backgroundColor: theme.card }]}>
+		<View style={[styles.container, { backgroundColor: theme.card }, containerStyle]}>
 			<Text style={[styles.label, { color: theme.textSecondary }]}>
 				{label} {required && '*'}
 			</Text>

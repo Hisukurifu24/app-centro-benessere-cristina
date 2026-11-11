@@ -9,13 +9,28 @@ import {
 	TextInput,
 	FlatList,
 	Modal,
+	KeyboardAvoidingView,
+	Platform,
+	Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useApp } from '../context/AppContext';
 import { lightTheme, darkTheme } from '../theme/colors';
-import { getClientiInattivi } from '../utils/notifications';
+import {
+	getClientiInattivi,
+	getInactivityCutoffMs,
+	GIORNI_INATTIVITA_DEFAULT,
+	GIORNI_INATTIVITA_MIN,
+	GIORNI_INATTIVITA_MAX,
+} from '../utils/notifications';
 import { sendInactiveClientMessage } from '../utils/whatsapp';
+
+// Restituisce il numero di giorni se il testo è un valore ammesso, altrimenti null.
+const parseGiorniInattivita = (value: string): number | null => {
+	const parsed = parseInt(value, 10);
+	return parsed >= GIORNI_INATTIVITA_MIN && parsed <= GIORNI_INATTIVITA_MAX ? parsed : null;
+};
 
 export default function StatisticheScreen() {
 	const { clienti, trattamenti, tipiTrattamento, impostazioni } = useApp();
@@ -26,8 +41,16 @@ export default function StatisticheScreen() {
 	const [tipoPiuUsatoSelezionatoId, setTipoPiuUsatoSelezionatoId] = useState<string | null>(null);
 	const [isTipoDropdownVisible, setIsTipoDropdownVisible] = useState(false);
 	const [tipoSearchQuery, setTipoSearchQuery] = useState('');
-	const [giorniInattivitaInput, setGiorniInattivitaInput] = useState('30');
-	const [giorniInattivitaError, setGiorniInattivitaError] = useState<string | null>(null);
+	// Testo nel campo (può essere temporaneamente non valido) e ultimo valore valido applicato alle liste.
+	const [giorniInattivitaInput, setGiorniInattivitaInput] = useState(String(GIORNI_INATTIVITA_DEFAULT));
+	const [giorniInattivita, setGiorniInattivita] = useState(GIORNI_INATTIVITA_DEFAULT);
+
+	const giorniInattivitaError =
+		parseGiorniInattivita(giorniInattivitaInput) !== null
+			? null
+			: giorniInattivitaInput
+				? `Valore valido: da ${GIORNI_INATTIVITA_MIN} a ${GIORNI_INATTIVITA_MAX}`
+				: `Inserisci un valore da ${GIORNI_INATTIVITA_MIN} a ${GIORNI_INATTIVITA_MAX}`;
 
 	const toggleSection = (section: string) => {
 		setExpandedSections(prev => ({
@@ -36,63 +59,48 @@ export default function StatisticheScreen() {
 		}));
 	};
 
-	const clientiInattivi = getClientiInattivi(clienti, trattamenti);
+	const clientiInattivi = useMemo(
+		() => getClientiInattivi(clienti, trattamenti, giorniInattivita),
+		[clienti, trattamenti, giorniInattivita]
+	);
 
-	const giorniInattivita = useMemo(() => {
-		const parsed = parseInt(giorniInattivitaInput, 10);
-		if (Number.isNaN(parsed)) {
-			return 30;
-		}
-
-		return Math.min(90, Math.max(1, parsed));
-	}, [giorniInattivitaInput]);
+	const sortedTipiTrattamento = useMemo(
+		() => [...tipiTrattamento].sort((a, b) => a.nome.localeCompare(b.nome, 'it-IT')),
+		[tipiTrattamento]
+	);
 
 	const filteredTipiTrattamento = useMemo(() => {
 		const query = tipoSearchQuery.trim().toLowerCase();
-		const sorted = [...tipiTrattamento].sort((a, b) => a.nome.localeCompare(b.nome, 'it-IT'));
-
 		if (!query) {
-			return sorted;
+			return sortedTipiTrattamento;
 		}
 
-		return sorted.filter(tipo => tipo.nome.toLowerCase().includes(query));
-	}, [tipiTrattamento, tipoSearchQuery]);
+		return sortedTipiTrattamento.filter(tipo => tipo.nome.toLowerCase().includes(query));
+	}, [sortedTipiTrattamento, tipoSearchQuery]);
 
 	const handleGiorniInattivitaChange = (value: string) => {
 		const numericOnly = value.replace(/[^0-9]/g, '');
 		setGiorniInattivitaInput(numericOnly);
 
-		if (!numericOnly) {
-			setGiorniInattivitaError('Inserisci un valore da 1 a 90');
-			return;
+		const parsed = parseGiorniInattivita(numericOnly);
+		if (parsed !== null) {
+			setGiorniInattivita(parsed);
 		}
-
-		const parsed = parseInt(numericOnly, 10);
-		if (Number.isNaN(parsed) || parsed < 1 || parsed > 90) {
-			setGiorniInattivitaError('Valore valido: da 1 a 90');
-			return;
-		}
-
-		setGiorniInattivitaError(null);
 	};
 
+	// Uscendo dal campo con un valore non valido, si torna all'ultimo valore applicato.
 	const normalizeGiorniInattivita = () => {
-		const parsed = parseInt(giorniInattivitaInput, 10);
-		if (Number.isNaN(parsed)) {
-			setGiorniInattivitaInput('30');
-			setGiorniInattivitaError(null);
-			return;
-		}
+		setGiorniInattivitaInput(String(giorniInattivita));
+	};
 
-		const normalized = Math.min(90, Math.max(1, parsed));
-		setGiorniInattivitaInput(String(normalized));
-		setGiorniInattivitaError(null);
+	const closeTipoDropdown = () => {
+		setIsTipoDropdownVisible(false);
+		setTipoSearchQuery('');
 	};
 
 	const handleSelectTipo = (tipoId: string) => {
 		setTipoSelezionatoId(tipoId);
-		setTipoSearchQuery('');
-		setIsTipoDropdownVisible(false);
+		closeTipoDropdown();
 	};
 
 	const clearTipoSelection = () => {
@@ -100,52 +108,39 @@ export default function StatisticheScreen() {
 		setTipoSearchQuery('');
 	};
 
-	const clientiInattiviPerTipo = useMemo(() => {
-		if (!tipoSelezionatoId) {
-			return [];
-		}
+	const tipoSelezionato = useMemo(
+		() => tipiTrattamento.find(tipo => tipo.id === tipoSelezionatoId) || null,
+		[tipiTrattamento, tipoSelezionatoId]
+	);
 
-		const tipoSelezionato = tipiTrattamento.find(tipo => tipo.id === tipoSelezionatoId);
+	const clientiInattiviPerTipo = useMemo(() => {
 		if (!tipoSelezionato) {
 			return [];
 		}
 
-		const now = Date.now();
-		const inactivityWindowMs = giorniInattivita * 24 * 60 * 60 * 1000;
+		const cutoffMs = getInactivityCutoffMs(giorniInattivita);
 		const nomeSelezionato = tipoSelezionato.nome.trim().toLowerCase();
 		const clientiConAlmenoUnTrattamento = new Set<string>();
+		const clienteIdsAttivi = new Set<string>();
 
-		const clienteIdsAttivi = new Set(
-			trattamenti
-				.filter(trattamento => {
-					const nomeTrattamento = trattamento.nome.trim().toLowerCase();
-					if (nomeTrattamento !== nomeSelezionato) {
-						return false;
-					}
+		trattamenti.forEach(trattamento => {
+			if (trattamento.nome.trim().toLowerCase() !== nomeSelezionato) {
+				return;
+			}
 
-					clientiConAlmenoUnTrattamento.add(trattamento.clienteId);
+			clientiConAlmenoUnTrattamento.add(trattamento.clienteId);
 
-					const dataTrattamentoMs = new Date(trattamento.data).getTime();
-					if (Number.isNaN(dataTrattamentoMs)) {
-						return false;
-					}
-
-					return now - dataTrattamentoMs <= inactivityWindowMs;
-				})
-				.map(trattamento => trattamento.clienteId)
-		);
+			if (new Date(trattamento.data).getTime() >= cutoffMs) {
+				clienteIdsAttivi.add(trattamento.clienteId);
+			}
+		});
 
 		return clienti.filter(
 			cliente =>
 				clientiConAlmenoUnTrattamento.has(cliente.id) &&
 				!clienteIdsAttivi.has(cliente.id)
 		);
-	}, [clienti, trattamenti, tipoSelezionatoId, tipiTrattamento, giorniInattivita]);
-
-	const tipoSelezionato = useMemo(
-		() => tipiTrattamento.find(tipo => tipo.id === tipoSelezionatoId) || null,
-		[tipiTrattamento, tipoSelezionatoId]
-	);
+	}, [clienti, trattamenti, tipoSelezionato, giorniInattivita]);
 
 	const tipoPiuUsatoSelezionato = useMemo(
 		() => tipiTrattamento.find(tipo => tipo.id === tipoPiuUsatoSelezionatoId) || null,
@@ -281,6 +276,31 @@ export default function StatisticheScreen() {
 					</View>
 				</View>
 
+				{/* Periodo di inattività (usato da entrambe le sezioni "Clienti Inattivi") */}
+				<View style={[styles.sectionCard, styles.giorniCard, { backgroundColor: theme.card }]}>
+					<View style={styles.giorniRow}>
+						<Text style={[styles.giorniLabel, { color: theme.text }]}>Giorni di inattività</Text>
+						<TextInput
+							value={giorniInattivitaInput}
+							onChangeText={handleGiorniInattivitaChange}
+							onBlur={normalizeGiorniInattivita}
+							keyboardType="number-pad"
+							maxLength={2}
+							placeholder={String(GIORNI_INATTIVITA_DEFAULT)}
+							placeholderTextColor={theme.textSecondary}
+							style={[
+								styles.giorniInput,
+								{ color: theme.text, borderColor: giorniInattivitaError ? theme.error : theme.border, backgroundColor: theme.background },
+							]}
+						/>
+					</View>
+					{giorniInattivitaError && (
+						<Text style={[styles.validationText, { color: theme.error }]}>
+							{giorniInattivitaError} (in uso: {giorniInattivita})
+						</Text>
+					)}
+				</View>
+
 				{/* Clienti Inattivi */}
 				<View style={[styles.sectionCard, { backgroundColor: theme.card }]}>
 					<TouchableOpacity
@@ -303,7 +323,7 @@ export default function StatisticheScreen() {
 					{expandedSections['inattivi'] && (
 						<View style={styles.sectionContent}>
 							<Text style={[styles.sectionDescription, { color: theme.textSecondary }]}>
-								Clienti che non vengono da almeno un mese
+								Clienti senza trattamenti negli ultimi {giorniInattivita} giorni
 							</Text>
 
 							{clientiInattivi.length > 0 ? (
@@ -363,23 +383,6 @@ export default function StatisticheScreen() {
 							{tipiTrattamento.length > 0 ? (
 								<>
 									<View style={styles.filterControlsRow}>
-										<View style={styles.giorniInputContainer}>
-											<Text style={[styles.filterLabel, { color: theme.textSecondary }]}>Giorni inattivita</Text>
-											<TextInput
-												value={giorniInattivitaInput}
-												onChangeText={handleGiorniInattivitaChange}
-												onBlur={normalizeGiorniInattivita}
-												keyboardType="number-pad"
-												maxLength={2}
-												placeholder="30"
-												placeholderTextColor={theme.textSecondary}
-												style={[
-													styles.giorniInput,
-													{ color: theme.text, borderColor: giorniInattivitaError ? theme.error : theme.border, backgroundColor: theme.background },
-												]}
-											/>
-										</View>
-
 										<View style={styles.tipoDropdownContainer}>
 											<Text style={[styles.filterLabel, { color: theme.textSecondary }]}>Tipo trattamento</Text>
 											<TouchableOpacity
@@ -396,10 +399,6 @@ export default function StatisticheScreen() {
 											</TouchableOpacity>
 										</View>
 									</View>
-
-									{giorniInattivitaError && (
-										<Text style={[styles.validationText, { color: theme.error }]}>{giorniInattivitaError}</Text>
-									)}
 
 									{tipoSelezionato && (
 										<TouchableOpacity style={styles.clearTipoButton} onPress={clearTipoSelection}>
@@ -441,21 +440,22 @@ export default function StatisticheScreen() {
 					visible={isTipoDropdownVisible}
 					transparent
 					animationType="slide"
-					onRequestClose={() => {
-						setIsTipoDropdownVisible(false);
-						setTipoSearchQuery('');
-					}}
+					onRequestClose={closeTipoDropdown}
 				>
-					<View style={styles.modalOverlay}>
+					<KeyboardAvoidingView
+						style={styles.modalOverlay}
+						behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+					>
+						<Pressable
+							style={StyleSheet.absoluteFill}
+							onPress={closeTipoDropdown}
+							accessibilityRole="button"
+							accessibilityLabel="Chiudi selezione tipo trattamento"
+						/>
 						<View style={[styles.modalContent, { backgroundColor: theme.card }]}>
 							<View style={styles.modalHeader}>
 								<Text style={[styles.modalTitle, { color: theme.text }]}>Seleziona tipo trattamento</Text>
-								<TouchableOpacity
-									onPress={() => {
-										setIsTipoDropdownVisible(false);
-										setTipoSearchQuery('');
-									}}
-								>
+								<TouchableOpacity onPress={closeTipoDropdown}>
 									<Ionicons name="close" size={24} color={theme.text} />
 								</TouchableOpacity>
 							</View>
@@ -479,6 +479,7 @@ export default function StatisticheScreen() {
 							<FlatList
 								data={filteredTipiTrattamento}
 								keyExtractor={item => item.id}
+								keyboardShouldPersistTaps="handled"
 								renderItem={({ item }) => (
 									<TouchableOpacity
 										style={[styles.tipoListItem, { borderBottomColor: theme.border }]}
@@ -495,7 +496,7 @@ export default function StatisticheScreen() {
 								}
 							/>
 						</View>
-					</View>
+					</KeyboardAvoidingView>
 				</Modal>
 
 				{/* Clienti per Trattamento più Usato */}
@@ -704,8 +705,17 @@ const styles = StyleSheet.create({
 		gap: 10,
 		marginBottom: 8,
 	},
-	giorniInputContainer: {
-		width: 120,
+	giorniCard: {
+		padding: 16,
+	},
+	giorniRow: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		justifyContent: 'space-between',
+	},
+	giorniLabel: {
+		fontSize: 16,
+		fontWeight: '600',
 	},
 	tipoDropdownContainer: {
 		flex: 1,
@@ -716,6 +726,8 @@ const styles = StyleSheet.create({
 		marginBottom: 6,
 	},
 	giorniInput: {
+		width: 72,
+		textAlign: 'center',
 		height: 44,
 		borderWidth: 1,
 		borderRadius: 10,
