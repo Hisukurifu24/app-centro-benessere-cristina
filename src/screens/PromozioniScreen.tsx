@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
 	View,
 	Text,
@@ -19,10 +19,11 @@ import { lightTheme, darkTheme } from '../theme/colors';
 import { formatDate } from '../utils/helpers';
 import { showImagePickerOptions } from '../utils/imagePicker';
 import DatePicker from '../components/DatePicker';
-import { Promozione } from '../types';
+import { Promozione, Cliente } from '../types';
+import { openWhatsApp } from '../utils/whatsapp';
 
 export default function PromozioniScreen() {
-	const { promozioni, addPromozione, deletePromozione, impostazioni } = useApp();
+	const { promozioni, addPromozione, deletePromozione, impostazioni, clienti } = useApp();
 	const theme = impostazioni.temaSuro ? darkTheme : lightTheme;
 
 	const [showModal, setShowModal] = useState(false);
@@ -32,11 +33,58 @@ export default function PromozioniScreen() {
 	const [dataFine, setDataFine] = useState(new Date());
 	const [foto, setFoto] = useState<string | undefined>();
 
-	const handleShare = async (promozione: Promozione) => {
-		try {
-			const message = `${promozione.nome}
+	// Condivisione verso i clienti
+	const [promoDaCondividere, setPromoDaCondividere] = useState<Promozione | null>(null);
+	const [ricercaCliente, setRicercaCliente] = useState('');
+	const [clientiInviati, setClientiInviati] = useState<Set<string>>(new Set());
+
+	const buildMessage = (promozione: Promozione) =>
+		`${promozione.nome}
 
 ${promozione.descrizione ? `${promozione.descrizione}\n\n` : ''}📅 Valida dal ${formatDate(promozione.dataInizio)} al ${formatDate(promozione.dataFine)}`;
+
+	const clientiFiltrati = useMemo(() => {
+		const query = ricercaCliente.trim().toLowerCase();
+		const result = query
+			? clienti.filter(c =>
+				c.nome.toLowerCase().includes(query) ||
+				c.telefono.includes(query)
+			)
+			: clienti;
+		return [...result].sort((a, b) => a.nome.localeCompare(b.nome, 'it'));
+	}, [clienti, ricercaCliente]);
+
+	const openShareModal = (promozione: Promozione) => {
+		setRicercaCliente('');
+		setClientiInviati(new Set());
+		setPromoDaCondividere(promozione);
+	};
+
+	const closeShareModal = () => {
+		setPromoDaCondividere(null);
+	};
+
+	const handleSendToCliente = (cliente: Cliente) => {
+		if (!promoDaCondividere) return;
+		if (!cliente.telefono?.trim()) {
+			Alert.alert('Numero mancante', `${cliente.nome} non ha un numero di telefono`);
+			return;
+		}
+		openWhatsApp(cliente.telefono, buildMessage(promoDaCondividere));
+		setClientiInviati(prev => new Set(prev).add(cliente.id));
+	};
+
+	const handleShareAltreApp = () => {
+		const promozione = promoDaCondividere;
+		if (!promozione) return;
+		closeShareModal();
+		// Attendi la chiusura del modal prima di aprire il foglio di condivisione
+		setTimeout(() => handleShare(promozione), 400);
+	};
+
+	const handleShare = async (promozione: Promozione) => {
+		try {
+			const message = buildMessage(promozione);
 
 			const sharePayload = promozione.foto
 				? {
@@ -138,7 +186,7 @@ ${promozione.descrizione ? `${promozione.descrizione}\n\n` : ''}📅 Valida dal 
 					<View style={styles.promoActions}>
 						<TouchableOpacity
 							style={[styles.shareButton, { backgroundColor: theme.primary }]}
-							onPress={() => handleShare(item)}
+							onPress={() => openShareModal(item)}
 						>
 							<Ionicons name="share-social" size={20} color="#FFF" />
 							<Text style={styles.shareButtonText}>Condividi</Text>
@@ -266,6 +314,96 @@ ${promozione.descrizione ? `${promozione.descrizione}\n\n` : ''}📅 Valida dal 
 								required
 							/>
 						</ScrollView>
+					</View>
+				</SafeAreaView>
+			</Modal>
+
+			<Modal
+				visible={promoDaCondividere !== null}
+				animationType="slide"
+				onRequestClose={closeShareModal}
+				presentationStyle="pageSheet"
+			>
+				<SafeAreaView style={{ flex: 1, backgroundColor: theme.background }} edges={['top', 'bottom']}>
+					<View style={[styles.modalContainer, { backgroundColor: theme.background }]}>
+						<View style={[styles.modalHeader, { backgroundColor: theme.card, borderBottomColor: theme.border }]}>
+							<TouchableOpacity onPress={closeShareModal}>
+								<Ionicons name="close" size={28} color={theme.text} />
+							</TouchableOpacity>
+							<Text style={[styles.modalTitle, { color: theme.text }]}>Invia a cliente</Text>
+							<TouchableOpacity onPress={handleShareAltreApp}>
+								<Ionicons name="share-outline" size={26} color={theme.primary} />
+							</TouchableOpacity>
+						</View>
+
+						<View style={[styles.searchContainer, { backgroundColor: theme.card }]}>
+							<Ionicons name="search" size={20} color={theme.textSecondary} style={styles.searchIcon} />
+							<TextInput
+								style={[styles.searchInput, { color: theme.text }]}
+								placeholder="Cerca cliente..."
+								placeholderTextColor={theme.textSecondary}
+								value={ricercaCliente}
+								onChangeText={setRicercaCliente}
+							/>
+							{ricercaCliente.length > 0 && (
+								<TouchableOpacity onPress={() => setRicercaCliente('')}>
+									<Ionicons name="close-circle" size={20} color={theme.textSecondary} />
+								</TouchableOpacity>
+							)}
+						</View>
+
+						{promoDaCondividere?.foto && (
+							<TouchableOpacity style={styles.shareHint} onPress={handleShareAltreApp}>
+								<Ionicons name="information-circle-outline" size={18} color={theme.textSecondary} />
+								<Text style={[styles.shareHintText, { color: theme.textSecondary }]}>
+									Su WhatsApp viene inviato solo il testo. Per inviare anche la foto tocca qui o l'icona in alto a destra.
+								</Text>
+							</TouchableOpacity>
+						)}
+
+						<FlatList
+							data={clientiFiltrati}
+							keyExtractor={item => item.id}
+							keyboardShouldPersistTaps="handled"
+							contentContainerStyle={styles.clientiListContent}
+							renderItem={({ item }) => {
+								const inviato = clientiInviati.has(item.id);
+								const senzaTelefono = !item.telefono?.trim();
+								return (
+									<TouchableOpacity
+										style={[styles.clienteRow, { backgroundColor: theme.card, borderColor: theme.border }]}
+										onPress={() => handleSendToCliente(item)}
+									>
+										{item.foto ? (
+											<Image source={{ uri: item.foto }} style={styles.clienteFoto} />
+										) : (
+											<View style={[styles.clienteFotoPlaceholder, { backgroundColor: theme.secondary }]}>
+												<Ionicons name="person" size={24} color={theme.text} />
+											</View>
+										)}
+										<View style={styles.clienteInfo}>
+											<Text style={[styles.clienteNome, { color: theme.text }]}>{item.nome}</Text>
+											<Text style={[styles.clienteTelefono, { color: theme.textSecondary }]}>
+												{senzaTelefono ? 'Nessun numero' : item.telefono}
+											</Text>
+										</View>
+										<Ionicons
+											name={inviato ? 'checkmark-circle' : 'logo-whatsapp'}
+											size={26}
+											color={inviato ? theme.success : senzaTelefono ? theme.textSecondary : '#25D366'}
+										/>
+									</TouchableOpacity>
+								);
+							}}
+							ListEmptyComponent={
+								<View style={styles.emptyContainer}>
+									<Ionicons name="people-outline" size={60} color={theme.textSecondary} />
+									<Text style={[styles.emptyText, { color: theme.textSecondary }]}>
+										{clienti.length === 0 ? 'Nessun cliente registrato' : 'Nessun cliente trovato'}
+									</Text>
+								</View>
+							}
+						/>
 					</View>
 				</SafeAreaView>
 			</Modal>
@@ -431,5 +569,67 @@ ${promozione.descrizione ? `${promozione.descrizione}\n\n` : ''}📅 Valida dal 
 	textArea: {
 		fontSize: 16,
 		minHeight: 100,
+	},
+	searchContainer: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		marginHorizontal: 16,
+		marginTop: 16,
+		paddingHorizontal: 12,
+		paddingVertical: 10,
+		borderRadius: 12,
+	},
+	searchIcon: {
+		marginRight: 8,
+	},
+	searchInput: {
+		flex: 1,
+		fontSize: 16,
+	},
+	shareHint: {
+		flexDirection: 'row',
+		alignItems: 'flex-start',
+		marginHorizontal: 16,
+		marginTop: 12,
+	},
+	shareHintText: {
+		flex: 1,
+		fontSize: 13,
+		marginLeft: 6,
+	},
+	clientiListContent: {
+		padding: 16,
+	},
+	clienteRow: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		padding: 12,
+		borderRadius: 12,
+		borderWidth: 1,
+		marginBottom: 10,
+	},
+	clienteFoto: {
+		width: 44,
+		height: 44,
+		borderRadius: 22,
+	},
+	clienteFotoPlaceholder: {
+		width: 44,
+		height: 44,
+		borderRadius: 22,
+		justifyContent: 'center',
+		alignItems: 'center',
+	},
+	clienteInfo: {
+		flex: 1,
+		marginLeft: 12,
+	},
+	clienteNome: {
+		fontSize: 16,
+		fontWeight: '600',
+	},
+	clienteTelefono: {
+		fontSize: 14,
+		marginTop: 2,
 	},
 });
