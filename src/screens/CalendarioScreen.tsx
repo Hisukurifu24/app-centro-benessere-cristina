@@ -37,6 +37,7 @@ export default function CalendarioScreen() {
 		title: string;
 		subtitle?: string;
 		sortTimestamp: number;
+		telefono?: string;
 	};
 
 	const eventTypeLabels: Record<EventType, string> = {
@@ -150,6 +151,7 @@ export default function CalendarioScreen() {
 				title: cliente.nome,
 				subtitle: 'Ricorrenza compleanno',
 				sortTimestamp: birthdayInVisibleYear.getTime(),
+				telefono: cliente.telefono,
 			});
 			addDot(dateKey, 'compleanno');
 		});
@@ -302,6 +304,15 @@ export default function CalendarioScreen() {
 								{event.subtitle ? (
 									<Text style={[styles.eventSubtitle, { color: theme.textSecondary }]}>{event.subtitle}</Text>
 								) : null}
+								{event.type === 'compleanno' && event.telefono ? (
+									<TouchableOpacity
+										style={[styles.eventWhatsappButton, { backgroundColor: '#25D366' }]}
+										onPress={() => sendBirthdayMessage(event.title, event.telefono!)}
+									>
+										<Ionicons name="logo-whatsapp" size={18} color="#FFF" />
+										<Text style={styles.eventWhatsappText}>Invia Auguri</Text>
+									</TouchableOpacity>
+								) : null}
 							</View>
 						))
 					)}
@@ -431,6 +442,21 @@ export default function CalendarioScreen() {
 	eventSubtitle: {
 		fontSize: 13,
 		marginTop: 2,
+	},
+	eventWhatsappButton: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		alignSelf: 'flex-start',
+		marginTop: 10,
+		paddingVertical: 8,
+		paddingHorizontal: 14,
+		borderRadius: 8,
+		gap: 6,
+	},
+	eventWhatsappText: {
+		color: '#FFF',
+		fontSize: 14,
+		fontWeight: '600',
 	},
 	emptyStateText: {
 		fontSize: 14,
