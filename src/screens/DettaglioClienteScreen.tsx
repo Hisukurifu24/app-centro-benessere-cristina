@@ -242,32 +242,6 @@ export default function DettaglioClienteScreen() {
 			</View>
 
 			<ScrollView style={styles.content}>
-				<View style={[styles.autocuraCard, styles.noteCard, { backgroundColor: theme.card }]}>
-					<Text style={[styles.sectionTitle, { color: theme.text }]}>Note</Text>
-					{isEditing ? (
-						<TextInput
-							style={[styles.autocuraInput, {
-								color: theme.text,
-								backgroundColor: theme.background,
-								borderColor: theme.border,
-							}]}
-							value={editedCliente?.note}
-							onChangeText={(text) =>
-								setEditedCliente(prev => prev ? { ...prev, note: text } : prev)
-							}
-							multiline
-							numberOfLines={4}
-							textAlignVertical="top"
-							placeholder="Note aggiuntive sul cliente..."
-							placeholderTextColor={theme.textSecondary}
-						/>
-					) : (
-						<Text style={[styles.noteText, { color: cliente.note ? theme.text : theme.textSecondary }]}>
-							{cliente.note || 'Nessuna nota. Tocca "Modifica" per aggiungerne una.'}
-						</Text>
-					)}
-				</View>
-
 				<View style={styles.fotoSection}>
 					<TouchableOpacity
 						onPress={() => {
@@ -398,6 +372,32 @@ export default function DettaglioClienteScreen() {
 							<Text style={[styles.infoText, { color: theme.text }]}>{cliente.indirizzo || 'N/A'}</Text>
 						)}
 					</View>
+				</View>
+
+				<View style={[styles.autocuraCard, { backgroundColor: theme.card }]}>
+					<Text style={[styles.sectionTitle, { color: theme.text }]}>Note</Text>
+					{isEditing ? (
+						<TextInput
+							style={[styles.autocuraInput, {
+								color: theme.text,
+								backgroundColor: theme.background,
+								borderColor: theme.border,
+							}]}
+							value={editedCliente?.note}
+							onChangeText={(text) =>
+								setEditedCliente(prev => prev ? { ...prev, note: text } : prev)
+							}
+							multiline
+							numberOfLines={4}
+							textAlignVertical="top"
+							placeholder="Note aggiuntive sul cliente..."
+							placeholderTextColor={theme.textSecondary}
+						/>
+					) : (
+						<Text style={[styles.noteText, { color: cliente.note ? theme.text : theme.textSecondary }]}>
+							{cliente.note || 'Nessuna nota. Tocca "Modifica" per aggiungerne una.'}
+						</Text>
+					)}
 				</View>
 
 				<View style={[styles.trattamentiCard, { backgroundColor: theme.card }]}>
@@ -664,9 +664,6 @@ export default function DettaglioClienteScreen() {
 	},
 	mostUsedEmpty: {
 		paddingVertical: 4,
-	},
-	noteCard: {
-		marginTop: 16,
 	},
 	noteText: {
 		fontSize: 16,
