@@ -83,3 +83,62 @@ export const showImagePickerOptions = (
 		]
 	);
 };
+
+const requestPermission = async (fromCamera: boolean) => {
+	const { status } = fromCamera
+		? await ImagePicker.requestCameraPermissionsAsync()
+		: await ImagePicker.requestMediaLibraryPermissionsAsync();
+	if (status !== 'granted') {
+		Alert.alert(
+			'Permesso negato',
+			fromCamera
+				? 'È necessario il permesso per accedere alla fotocamera'
+				: 'È necessario il permesso per accedere alla galleria'
+		);
+		return false;
+	}
+	return true;
+};
+
+/**
+ * Seleziona una o più immagini mantenendo le proporzioni originali.
+ * Dalla galleria permette la selezione multipla (fino a selectionLimit).
+ */
+export const pickImages = async (fromCamera: boolean, selectionLimit: number): Promise<string[]> => {
+	try {
+		if (!(await requestPermission(fromCamera))) return [];
+
+		const result = fromCamera
+			? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.7 })
+			: await ImagePicker.launchImageLibraryAsync({
+				mediaTypes: ['images'],
+				quality: 0.7,
+				allowsMultipleSelection: true,
+				orderedSelection: true,
+				selectionLimit,
+			});
+
+		if (result.canceled || !result.assets) return [];
+		return result.assets.map(asset => asset.uri);
+	} catch (error) {
+		console.error('Errore selezione immagini:', error);
+		Alert.alert('Errore', 'Impossibile selezionare le immagini');
+		return [];
+	}
+};
+
+export const showMultiImagePickerOptions = (
+	onImagesSelected: (uris: string[]) => void,
+	selectionLimit: number
+) => {
+	const handle = async (fromCamera: boolean) => {
+		const uris = await pickImages(fromCamera, selectionLimit);
+		if (uris.length > 0) onImagesSelected(uris);
+	};
+
+	Alert.alert('Aggiungi foto', 'Scegli da dove prendere le foto', [
+		{ text: 'Fotocamera', onPress: () => handle(true) },
+		{ text: 'Galleria', onPress: () => handle(false) },
+		{ text: 'Annulla', style: 'cancel' },
+	]);
+};

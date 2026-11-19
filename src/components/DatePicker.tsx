@@ -14,14 +14,23 @@ interface DatePickerProps {
 	containerStyle?: StyleProp<ViewStyle>;
 }
 
+// Limiti di default sempre passati al picker nativo.
+// Con la New Architecture iOS ricicla le viste native: se un picker usato con
+// maximumDate (es. data di nascita = oggi) viene riciclato per un picker senza
+// limiti, la prop "undefined" arriva al nativo come 0 e il limite diventa
+// 01/01/1970 finché l'app non viene riavviata. Passando sempre un valore esplicito
+// il limite viene sempre sovrascritto correttamente.
+const DEFAULT_MINIMUM_DATE = new Date(1900, 0, 1);
+const DEFAULT_MAXIMUM_DATE = new Date(2100, 11, 31);
+
 export default function DatePicker({
 	label,
 	value,
 	onChange,
 	theme,
 	required = false,
-	maximumDate,
-	minimumDate,
+	maximumDate = DEFAULT_MAXIMUM_DATE,
+	minimumDate = DEFAULT_MINIMUM_DATE,
 	containerStyle,
 }: DatePickerProps) {
 	const [show, setShow] = useState(false);

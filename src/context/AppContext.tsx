@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Cliente, Trattamento, Promozione, Impostazioni, TipoTrattamento } from '../types';
+import { deletePromoImages, getImmaginiPromozione } from '../utils/promoImages';
 
 interface AppContextType {
 	clienti: Cliente[];
@@ -70,6 +71,12 @@ const normalizeCliente = (cliente: Cliente): Cliente => {
 	};
 };
 
+// Migrazione: la vecchia foto singola diventa la prima voce di immagini
+const normalizePromozione = (promozione: Promozione): Promozione => {
+	const { foto, ...rest } = promozione;
+	return { ...rest, immagini: getImmaginiPromozione(promozione) };
+};
+
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
 	const [clienti, setClienti] = useState<Cliente[]>([]);
 	const [trattamenti, setTrattamenti] = useState<Trattamento[]>([]);
@@ -102,7 +109,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 				setClienti(parsedClienti.map(normalizeCliente));
 			}
 			if (trattamentiData) setTrattamenti(JSON.parse(trattamentiData));
-			if (promozioniData) setPromozioni(JSON.parse(promozioniData));
+			if (promozioniData) setPromozioni((JSON.parse(promozioniData) as Promozione[]).map(normalizePromozione));
 			if (tipiData) setTipiTrattamento(JSON.parse(tipiData));
 			if (impostazioniData) setImpostazioni(JSON.parse(impostazioniData));
 		} catch (error) {
@@ -271,9 +278,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 	};
 
 	const deletePromozione = async (id: string) => {
+		const promozione = promozioni.find(p => p.id === id);
 		const nuovePromozioni = promozioni.filter(p => p.id !== id);
 		setPromozioni(nuovePromozioni);
 		await AsyncStorage.setItem(STORAGE_KEYS.PROMOZIONI, JSON.stringify(nuovePromozioni));
+		if (promozione) {
+			await deletePromoImages(getImmaginiPromozione(promozione));
+		}
 	};
 
 	// IMPOSTAZIONI
@@ -292,15 +303,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 	}) => {
 		try {
 			const normalizedClienti = data.clienti.map(normalizeCliente);
+			const normalizedPromozioni = data.promozioni.map(normalizePromozione);
 			setClienti(normalizedClienti);
 			setTrattamenti(data.trattamenti);
-			setPromozioni(data.promozioni);
+			setPromozioni(normalizedPromozioni);
 			setTipiTrattamento(data.tipiTrattamento);
 
 			await Promise.all([
 				AsyncStorage.setItem(STORAGE_KEYS.CLIENTI, JSON.stringify(normalizedClienti)),
 				AsyncStorage.setItem(STORAGE_KEYS.TRATTAMENTI, JSON.stringify(data.trattamenti)),
-				AsyncStorage.setItem(STORAGE_KEYS.PROMOZIONI, JSON.stringify(data.promozioni)),
+				AsyncStorage.setItem(STORAGE_KEYS.PROMOZIONI, JSON.stringify(normalizedPromozioni)),
 				AsyncStorage.setItem(STORAGE_KEYS.TIPI_TRATTAMENTO, JSON.stringify(data.tipiTrattamento)),
 			]);
 		} catch (error) {

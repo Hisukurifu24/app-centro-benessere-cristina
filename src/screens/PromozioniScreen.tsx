@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import {
 	View,
 	Text,
@@ -10,20 +10,76 @@ import {
 	Modal,
 	TextInput,
 	ScrollView,
-	Share,
+	ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import RNShare from 'react-native-share';
 import { useApp } from '../context/AppContext';
 import { lightTheme, darkTheme } from '../theme/colors';
 import { formatDate } from '../utils/helpers';
-import { showImagePickerOptions } from '../utils/imagePicker';
+import { showMultiImagePickerOptions } from '../utils/imagePicker';
+import {
+	fileExists,
+	getImmaginiPromozione,
+	resolveImageUri,
+	savePromoImage,
+} from '../utils/promoImages';
 import DatePicker from '../components/DatePicker';
-import { Promozione, Cliente } from '../types';
-import { openWhatsApp } from '../utils/whatsapp';
+import { Promozione } from '../types';
+
+const MAX_IMMAGINI = 10;
+
+function PromoGallery({ immagini, theme }: { immagini: string[]; theme: any }) {
+	const [width, setWidth] = useState(0);
+	const [pagina, setPagina] = useState(0);
+
+	if (immagini.length === 0) return null;
+
+	if (immagini.length === 1) {
+		return (
+			<Image source={{ uri: resolveImageUri(immagini[0]) }} style={styles.promoFoto} resizeMode="contain" />
+		);
+	}
+
+	return (
+		<View onLayout={e => setWidth(e.nativeEvent.layout.width)}>
+			{width > 0 && (
+				<FlatList
+					data={immagini}
+					keyExtractor={(item, index) => `${index}-${item}`}
+					horizontal
+					pagingEnabled
+					showsHorizontalScrollIndicator={false}
+					onMomentumScrollEnd={e =>
+						setPagina(Math.round(e.nativeEvent.contentOffset.x / width))
+					}
+					renderItem={({ item }) => (
+						<Image
+							source={{ uri: resolveImageUri(item) }}
+							style={[styles.promoFoto, { width }]}
+							resizeMode="contain"
+						/>
+					)}
+				/>
+			)}
+			<View style={styles.galleryDots}>
+				{immagini.map((_, index) => (
+					<View
+						key={index}
+						style={[
+							styles.galleryDot,
+							{ backgroundColor: index === pagina ? theme.primary : theme.border },
+						]}
+					/>
+				))}
+			</View>
+		</View>
+	);
+}
 
 export default function PromozioniScreen() {
-	const { promozioni, addPromozione, deletePromozione, impostazioni, clienti } = useApp();
+	const { promozioni, addPromozione, deletePromozione, impostazioni } = useApp();
 	const theme = impostazioni.temaSuro ? darkTheme : lightTheme;
 
 	const [showModal, setShowModal] = useState(false);
@@ -31,77 +87,73 @@ export default function PromozioniScreen() {
 	const [descrizione, setDescrizione] = useState('');
 	const [dataInizio, setDataInizio] = useState(new Date());
 	const [dataFine, setDataFine] = useState(new Date());
-	const [foto, setFoto] = useState<string | undefined>();
-
-	// Condivisione verso i clienti
-	const [promoDaCondividere, setPromoDaCondividere] = useState<Promozione | null>(null);
-	const [ricercaCliente, setRicercaCliente] = useState('');
-	const [clientiInviati, setClientiInviati] = useState<Set<string>>(new Set());
+	const [immagini, setImmagini] = useState<string[]>([]);
+	const [salvataggioInCorso, setSalvataggioInCorso] = useState(false);
 
 	const buildMessage = (promozione: Promozione) =>
 		`${promozione.nome}
 
 ${promozione.descrizione ? `${promozione.descrizione}\n\n` : ''}📅 Valida dal ${formatDate(promozione.dataInizio)} al ${formatDate(promozione.dataFine)}`;
 
-	const clientiFiltrati = useMemo(() => {
-		const query = ricercaCliente.trim().toLowerCase();
-		const result = query
-			? clienti.filter(c =>
-				c.nome.toLowerCase().includes(query) ||
-				c.telefono.includes(query)
-			)
-			: clienti;
-		return [...result].sort((a, b) => a.nome.localeCompare(b.nome, 'it'));
-	}, [clienti, ricercaCliente]);
-
-	const openShareModal = (promozione: Promozione) => {
-		setRicercaCliente('');
-		setClientiInviati(new Set());
-		setPromoDaCondividere(promozione);
-	};
-
-	const closeShareModal = () => {
-		setPromoDaCondividere(null);
-	};
-
-	const handleSendToCliente = (cliente: Cliente) => {
-		if (!promoDaCondividere) return;
-		if (!cliente.telefono?.trim()) {
-			Alert.alert('Numero mancante', `${cliente.nome} non ha un numero di telefono`);
-			return;
-		}
-		openWhatsApp(cliente.telefono, buildMessage(promoDaCondividere));
-		setClientiInviati(prev => new Set(prev).add(cliente.id));
-	};
-
-	const handleShareAltreApp = () => {
-		const promozione = promoDaCondividere;
-		if (!promozione) return;
-		closeShareModal();
-		// Attendi la chiusura del modal prima di aprire il foglio di condivisione
-		setTimeout(() => handleShare(promozione), 400);
-	};
-
-	const handleShare = async (promozione: Promozione) => {
+	const condividi = async (promozione: Promozione, urls: string[]) => {
 		try {
-			const message = buildMessage(promozione);
-
-			const sharePayload = promozione.foto
-				? {
-					message,
-					title: promozione.nome,
-					url: promozione.foto,
-				}
-				: {
-					message,
-					title: promozione.nome,
-				};
-
-			await Share.share(sharePayload);
+			await RNShare.open({
+				title: promozione.nome,
+				message: buildMessage(promozione),
+				...(urls.length > 0 ? { urls } : {}),
+				failOnCancel: false,
+			});
 		} catch (error) {
 			console.error('Errore condivisione:', error);
 			Alert.alert('Errore', 'Impossibile condividere la promozione');
 		}
+	};
+
+	const handleShare = async (promozione: Promozione) => {
+		const uris = getImmaginiPromozione(promozione).map(resolveImageUri);
+		const esistenze = await Promise.all(uris.map(fileExists));
+		const disponibili = uris.filter((_, index) => esistenze[index]);
+		const mancanti = uris.length - disponibili.length;
+
+		if (mancanti > 0) {
+			Alert.alert(
+				'Foto non disponibili',
+				mancanti === uris.length
+					? 'Le foto di questa promozione non sono più presenti sul dispositivo. Vuoi condividere solo il testo?'
+					: `${mancanti} foto non sono più presenti sul dispositivo. Vuoi condividere le altre?`,
+				[
+					{ text: 'Annulla', style: 'cancel' },
+					{ text: 'Condividi', onPress: () => condividi(promozione, disponibili) },
+				]
+			);
+			return;
+		}
+
+		await condividi(promozione, disponibili);
+	};
+
+	const resetForm = () => {
+		setNome('');
+		setDescrizione('');
+		setDataInizio(new Date());
+		setDataFine(new Date());
+		setImmagini([]);
+	};
+
+	const handleAggiungiFoto = () => {
+		const rimanenti = MAX_IMMAGINI - immagini.length;
+		if (rimanenti <= 0) {
+			Alert.alert('Limite raggiunto', `Puoi aggiungere al massimo ${MAX_IMMAGINI} foto`);
+			return;
+		}
+		showMultiImagePickerOptions(
+			uris => setImmagini(prev => [...prev, ...uris].slice(0, MAX_IMMAGINI)),
+			rimanenti
+		);
+	};
+
+	const handleRimuoviFoto = (index: number) => {
+		setImmagini(prev => prev.filter((_, i) => i !== index));
 	};
 
 	const handleSave = async () => {
@@ -109,33 +161,34 @@ ${promozione.descrizione ? `${promozione.descrizione}\n\n` : ''}📅 Valida dal 
 			Alert.alert('Errore', 'Compila tutti i campi obbligatori');
 			return;
 		}
+		if (salvataggioInCorso) return;
 
+		setSalvataggioInCorso(true);
 		try {
+			// Copia le foto in una cartella permanente dell'app
+			const immaginiSalvate = await Promise.all(immagini.map(savePromoImage));
+
 			await addPromozione({
 				nome: nome.trim(),
 				descrizione: descrizione.trim(),
-				foto,
+				immagini: immaginiSalvate,
 				dataInizio: dataInizio.toISOString(),
 				dataFine: dataFine.toISOString(),
 			});
 
-			// Reset dei campi dopo il successo del salvataggio
-			setNome('');
-			setDescrizione('');
-			setDataInizio(new Date());
-			setDataFine(new Date());
-			setFoto(undefined);
+			resetForm();
 
 			// Chiudi il modal prima di mostrare l'alert
 			setShowModal(false);
 
-			// Mostra l'alert dopo aver chiuso il modal
 			setTimeout(() => {
 				Alert.alert('Successo', 'Promozione aggiunta');
 			}, 300);
 		} catch (error) {
 			console.error('Errore durante l\'aggiunta della promozione:', error);
 			Alert.alert('Errore', 'Impossibile aggiungere la promozione');
+		} finally {
+			setSalvataggioInCorso(false);
 		}
 	};
 
@@ -157,18 +210,16 @@ ${promozione.descrizione ? `${promozione.descrizione}\n\n` : ''}📅 Valida dal 
 
 		return (
 			<View style={[styles.promoCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-				{item.foto && (
-					<Image source={{ uri: item.foto }} style={styles.promoFoto} resizeMode="contain" />
-				)}
+				<PromoGallery immagini={getImmaginiPromozione(item)} theme={theme} />
 
 				<View style={styles.promoContent}>
 					<Text style={[styles.promoNome, { color: theme.text }]}>{item.nome}</Text>
 
-					{item.descrizione && (
+					{item.descrizione ? (
 						<Text style={[styles.promoDescrizione, { color: theme.textSecondary }]}>
 							{item.descrizione}
 						</Text>
-					)}
+					) : null}
 
 					<View style={styles.promoDate}>
 						<Ionicons name="calendar" size={16} color={theme.textSecondary} />
@@ -186,7 +237,7 @@ ${promozione.descrizione ? `${promozione.descrizione}\n\n` : ''}📅 Valida dal 
 					<View style={styles.promoActions}>
 						<TouchableOpacity
 							style={[styles.shareButton, { backgroundColor: theme.primary }]}
-							onPress={() => openShareModal(item)}
+							onPress={() => handleShare(item)}
 						>
 							<Ionicons name="share-social" size={20} color="#FFF" />
 							<Text style={styles.shareButtonText}>Condividi</Text>
@@ -240,31 +291,62 @@ ${promozione.descrizione ? `${promozione.descrizione}\n\n` : ''}📅 Valida dal 
 				<SafeAreaView style={{ flex: 1, backgroundColor: theme.background }} edges={['top', 'bottom']}>
 					<View style={[styles.modalContainer, { backgroundColor: theme.background }]}>
 						<View style={[styles.modalHeader, { backgroundColor: theme.card, borderBottomColor: theme.border }]}>
-							<TouchableOpacity onPress={() => setShowModal(false)}>
+							<TouchableOpacity onPress={() => setShowModal(false)} disabled={salvataggioInCorso}>
 								<Ionicons name="close" size={28} color={theme.text} />
 							</TouchableOpacity>
 							<Text style={[styles.modalTitle, { color: theme.text }]}>Nuova Promozione</Text>
-							<TouchableOpacity onPress={handleSave}>
-								<Text style={[styles.saveButton, { color: theme.primary }]}>Salva</Text>
-							</TouchableOpacity>
+							{salvataggioInCorso ? (
+								<ActivityIndicator color={theme.primary} />
+							) : (
+								<TouchableOpacity onPress={handleSave}>
+									<Text style={[styles.saveButton, { color: theme.primary }]}>Salva</Text>
+								</TouchableOpacity>
+							)}
 						</View>
 
 						<ScrollView style={styles.modalContent} contentContainerStyle={styles.modalContentContainer}>
-							<TouchableOpacity
-								style={[styles.fotoButton, { borderColor: theme.border }]}
-								onPress={() => showImagePickerOptions(setFoto, { preserveOriginalAspectRatio: true })}
-							>
-								{foto ? (
-									<Image source={{ uri: foto }} style={styles.fotoPreview} resizeMode="contain" />
-								) : (
-									<>
-										<Ionicons name="image" size={40} color={theme.textSecondary} />
-										<Text style={[styles.fotoButtonText, { color: theme.textSecondary }]}>
-											Aggiungi foto
-										</Text>
-									</>
-								)}
-							</TouchableOpacity>
+							{immagini.length === 0 ? (
+								<TouchableOpacity
+									style={[styles.fotoButton, { borderColor: theme.border }]}
+									onPress={handleAggiungiFoto}
+								>
+									<Ionicons name="images" size={40} color={theme.textSecondary} />
+									<Text style={[styles.fotoButtonText, { color: theme.textSecondary }]}>
+										Aggiungi foto (max {MAX_IMMAGINI})
+									</Text>
+								</TouchableOpacity>
+							) : (
+								<ScrollView
+									horizontal
+									showsHorizontalScrollIndicator={false}
+									style={styles.thumbList}
+									contentContainerStyle={styles.thumbListContent}
+								>
+									{immagini.map((uri, index) => (
+										<View key={`${index}-${uri}`} style={[styles.thumb, { borderColor: theme.border }]}>
+											<Image source={{ uri }} style={styles.thumbImage} resizeMode="cover" />
+											<TouchableOpacity
+												style={styles.thumbRemove}
+												onPress={() => handleRimuoviFoto(index)}
+												hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+											>
+												<Ionicons name="close-circle" size={24} color="#FFF" />
+											</TouchableOpacity>
+										</View>
+									))}
+									{immagini.length < MAX_IMMAGINI && (
+										<TouchableOpacity
+											style={[styles.thumb, styles.thumbAdd, { borderColor: theme.border }]}
+											onPress={handleAggiungiFoto}
+										>
+											<Ionicons name="add" size={32} color={theme.textSecondary} />
+											<Text style={[styles.thumbAddText, { color: theme.textSecondary }]}>
+												{immagini.length}/{MAX_IMMAGINI}
+											</Text>
+										</TouchableOpacity>
+									)}
+								</ScrollView>
+							)}
 
 							<View style={[styles.inputContainer, { backgroundColor: theme.card }]}>
 								<Text style={[styles.label, { color: theme.textSecondary }]}>Nome *</Text>
@@ -317,99 +399,11 @@ ${promozione.descrizione ? `${promozione.descrizione}\n\n` : ''}📅 Valida dal 
 					</View>
 				</SafeAreaView>
 			</Modal>
-
-			<Modal
-				visible={promoDaCondividere !== null}
-				animationType="slide"
-				onRequestClose={closeShareModal}
-				presentationStyle="pageSheet"
-			>
-				<SafeAreaView style={{ flex: 1, backgroundColor: theme.background }} edges={['top', 'bottom']}>
-					<View style={[styles.modalContainer, { backgroundColor: theme.background }]}>
-						<View style={[styles.modalHeader, { backgroundColor: theme.card, borderBottomColor: theme.border }]}>
-							<TouchableOpacity onPress={closeShareModal}>
-								<Ionicons name="close" size={28} color={theme.text} />
-							</TouchableOpacity>
-							<Text style={[styles.modalTitle, { color: theme.text }]}>Invia a cliente</Text>
-							<TouchableOpacity onPress={handleShareAltreApp}>
-								<Ionicons name="share-outline" size={26} color={theme.primary} />
-							</TouchableOpacity>
-						</View>
-
-						<View style={[styles.searchContainer, { backgroundColor: theme.card }]}>
-							<Ionicons name="search" size={20} color={theme.textSecondary} style={styles.searchIcon} />
-							<TextInput
-								style={[styles.searchInput, { color: theme.text }]}
-								placeholder="Cerca cliente..."
-								placeholderTextColor={theme.textSecondary}
-								value={ricercaCliente}
-								onChangeText={setRicercaCliente}
-							/>
-							{ricercaCliente.length > 0 && (
-								<TouchableOpacity onPress={() => setRicercaCliente('')}>
-									<Ionicons name="close-circle" size={20} color={theme.textSecondary} />
-								</TouchableOpacity>
-							)}
-						</View>
-
-						{promoDaCondividere?.foto && (
-							<TouchableOpacity style={styles.shareHint} onPress={handleShareAltreApp}>
-								<Ionicons name="information-circle-outline" size={18} color={theme.textSecondary} />
-								<Text style={[styles.shareHintText, { color: theme.textSecondary }]}>
-									Su WhatsApp viene inviato solo il testo. Per inviare anche la foto tocca qui o l'icona in alto a destra.
-								</Text>
-							</TouchableOpacity>
-						)}
-
-						<FlatList
-							data={clientiFiltrati}
-							keyExtractor={item => item.id}
-							keyboardShouldPersistTaps="handled"
-							contentContainerStyle={styles.clientiListContent}
-							renderItem={({ item }) => {
-								const inviato = clientiInviati.has(item.id);
-								const senzaTelefono = !item.telefono?.trim();
-								return (
-									<TouchableOpacity
-										style={[styles.clienteRow, { backgroundColor: theme.card, borderColor: theme.border }]}
-										onPress={() => handleSendToCliente(item)}
-									>
-										{item.foto ? (
-											<Image source={{ uri: item.foto }} style={styles.clienteFoto} />
-										) : (
-											<View style={[styles.clienteFotoPlaceholder, { backgroundColor: theme.secondary }]}>
-												<Ionicons name="person" size={24} color={theme.text} />
-											</View>
-										)}
-										<View style={styles.clienteInfo}>
-											<Text style={[styles.clienteNome, { color: theme.text }]}>{item.nome}</Text>
-											<Text style={[styles.clienteTelefono, { color: theme.textSecondary }]}>
-												{senzaTelefono ? 'Nessun numero' : item.telefono}
-											</Text>
-										</View>
-										<Ionicons
-											name={inviato ? 'checkmark-circle' : 'logo-whatsapp'}
-											size={26}
-											color={inviato ? theme.success : senzaTelefono ? theme.textSecondary : '#25D366'}
-										/>
-									</TouchableOpacity>
-								);
-							}}
-							ListEmptyComponent={
-								<View style={styles.emptyContainer}>
-									<Ionicons name="people-outline" size={60} color={theme.textSecondary} />
-									<Text style={[styles.emptyText, { color: theme.textSecondary }]}>
-										{clienti.length === 0 ? 'Nessun cliente registrato' : 'Nessun cliente trovato'}
-									</Text>
-								</View>
-							}
-						/>
-					</View>
-				</SafeAreaView>
-			</Modal>
 		</SafeAreaView>
 	);
-} const styles = StyleSheet.create({
+}
+
+const styles = StyleSheet.create({
 	container: {
 		flex: 1,
 	},
@@ -444,6 +438,17 @@ ${promozione.descrizione ? `${promozione.descrizione}\n\n` : ''}📅 Valida dal 
 	promoFoto: {
 		width: '100%',
 		height: 200,
+	},
+	galleryDots: {
+		flexDirection: 'row',
+		justifyContent: 'center',
+		paddingTop: 8,
+		gap: 6,
+	},
+	galleryDot: {
+		width: 7,
+		height: 7,
+		borderRadius: 4,
 	},
 	promoContent: {
 		padding: 16,
@@ -544,14 +549,45 @@ ${promozione.descrizione ? `${promozione.descrizione}\n\n` : ''}📅 Valida dal 
 		justifyContent: 'center',
 		marginBottom: 16,
 	},
-	fotoPreview: {
-		width: '100%',
-		height: '100%',
-		borderRadius: 12,
-	},
 	fotoButtonText: {
 		marginTop: 8,
 		fontSize: 14,
+	},
+	thumbList: {
+		marginBottom: 16,
+		marginHorizontal: -20,
+	},
+	thumbListContent: {
+		paddingHorizontal: 20,
+		gap: 10,
+	},
+	thumb: {
+		width: 120,
+		height: 120,
+		borderRadius: 12,
+		borderWidth: 1,
+		overflow: 'hidden',
+	},
+	thumbImage: {
+		width: '100%',
+		height: '100%',
+	},
+	thumbRemove: {
+		position: 'absolute',
+		top: 4,
+		right: 4,
+		backgroundColor: 'rgba(0, 0, 0, 0.45)',
+		borderRadius: 12,
+	},
+	thumbAdd: {
+		borderWidth: 2,
+		borderStyle: 'dashed',
+		alignItems: 'center',
+		justifyContent: 'center',
+	},
+	thumbAddText: {
+		fontSize: 12,
+		marginTop: 2,
 	},
 	inputContainer: {
 		borderRadius: 12,
@@ -569,67 +605,5 @@ ${promozione.descrizione ? `${promozione.descrizione}\n\n` : ''}📅 Valida dal 
 	textArea: {
 		fontSize: 16,
 		minHeight: 100,
-	},
-	searchContainer: {
-		flexDirection: 'row',
-		alignItems: 'center',
-		marginHorizontal: 16,
-		marginTop: 16,
-		paddingHorizontal: 12,
-		paddingVertical: 10,
-		borderRadius: 12,
-	},
-	searchIcon: {
-		marginRight: 8,
-	},
-	searchInput: {
-		flex: 1,
-		fontSize: 16,
-	},
-	shareHint: {
-		flexDirection: 'row',
-		alignItems: 'flex-start',
-		marginHorizontal: 16,
-		marginTop: 12,
-	},
-	shareHintText: {
-		flex: 1,
-		fontSize: 13,
-		marginLeft: 6,
-	},
-	clientiListContent: {
-		padding: 16,
-	},
-	clienteRow: {
-		flexDirection: 'row',
-		alignItems: 'center',
-		padding: 12,
-		borderRadius: 12,
-		borderWidth: 1,
-		marginBottom: 10,
-	},
-	clienteFoto: {
-		width: 44,
-		height: 44,
-		borderRadius: 22,
-	},
-	clienteFotoPlaceholder: {
-		width: 44,
-		height: 44,
-		borderRadius: 22,
-		justifyContent: 'center',
-		alignItems: 'center',
-	},
-	clienteInfo: {
-		flex: 1,
-		marginLeft: 12,
-	},
-	clienteNome: {
-		fontSize: 16,
-		fontWeight: '600',
-	},
-	clienteTelefono: {
-		fontSize: 14,
-		marginTop: 2,
 	},
 });

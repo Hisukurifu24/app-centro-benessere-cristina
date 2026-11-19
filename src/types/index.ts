@@ -44,7 +44,10 @@ export interface Promozione {
 	id: string;
 	nome: string;
 	descrizione: string;
+	/** @deprecated singola foto legacy, sostituita da immagini */
 	foto?: string;
+	/** Percorsi relativi alla documentDirectory (o URI assoluti legacy) */
+	immagini?: string[];
 	dataInizio: string;
 	dataFine: string;
 	createdAt: string;
